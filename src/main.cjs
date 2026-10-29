@@ -2,9 +2,11 @@ const { app, BrowserWindow, globalShortcut, ipcMain, Menu, Tray, nativeImage, sc
 const fs = require('node:fs');
 const path = require('node:path');
 const { WindowsMedia, DemoMedia, EMPTY_STATE, validateCommand } = require('./media.cjs');
-const { SIZE, preferences, clampBounds } = require('./window-state.cjs');
+const { preferences, layoutForDisplays } = require('./window-state.cjs');
+const { watchDisplays } = require('./display-placement.cjs');
 const demo = process.argv.includes('--demo');
-let window, tray, media, saveTimer;
+let window, tray, media, saveTimer, placement;
+let effectiveScale = 1;
 let settings = {}, interaction = true, shortcutAvailable = false, state = { ...EMPTY_STATE };
 
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -14,26 +16,22 @@ else {
 }
 
 function publish() { if (window && !window.isDestroyed()) window.webContents.send('widget:state', snapshot()); }
-function snapshot() { return { ...state, interaction, shortcutAvailable, demo, preferences: preferences(settings), platform: process.platform }; }
+function snapshot() { return { ...state, interaction, shortcutAvailable, demo, preferences: { ...preferences(settings), scale: effectiveScale }, platform: process.platform }; }
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch (error) { console.error('Cannot save preferences', error.message); } }, 250); }
 function setInteraction(enabled) {
   interaction = enabled;
   window.setIgnoreMouseEvents(!enabled, { forward: true });
   window.setFocusable(enabled);
-  if (enabled) { window.show(); window.focus(); }
+  if (enabled) { placement?.restore(); window.show(); window.focus(); }
   else window.blur();
   publish(); updateTray();
 }
 function setPreferences(update) {
   if (!update || typeof update !== 'object' || Object.keys(update).some(key => !['opacity', 'scale'].includes(key)) || Object.values(update).some(value => !Number.isFinite(value))) throw new Error('Некорректные настройки');
   const next = preferences({ ...preferences(settings), ...update });
-  const area = screen.getDisplayMatching(window.getBounds()).workArea;
-  next.scale = Math.min(next.scale, area.width / SIZE.width, area.height / SIZE.height);
   Object.assign(settings, next);
-  window.setBounds(clampBounds(window.getBounds(), screen.getAllDisplays(), next.scale));
-  window.webContents.setZoomFactor(next.scale);
-  settings.bounds = window.getBounds();
-  save(); publish(); updateTray();
+  placement.restore();
+  updateTray();
 }
 function menu() {
   return Menu.buildFromTemplate([
@@ -43,7 +41,7 @@ function menu() {
     { label: 'Непрозрачность оформления', submenu: [.25, .4, .5, .65, .85, 1].map(opacity => ({ label: `${Math.round(opacity * 100)}%`, type: 'radio', checked: preferences(settings).opacity === opacity, click: () => setPreferences({ opacity }) })) },
     { label: 'Масштаб · Ctrl + колесо', submenu: [.5, .65, .75, 1, 1.25, 1.5, 1.75].map(scale => ({ label: `${Math.round(scale * 100)}%`, type: 'radio', checked: Math.abs(preferences(settings).scale - scale) < .01, click: () => setPreferences({ scale }) })) },
     { label: state.connected ? 'Яндекс Музыка подключена' : 'Ожидание Яндекс Музыки', enabled: false },
-    { label: 'Вернуть в угол экрана', click: () => { window.setBounds(clampBounds(null, [screen.getPrimaryDisplay()], preferences(settings).scale)); } },
+    { label: 'Вернуть в угол экрана', click: () => placement.restore(true) },
     { label: 'Запускать с Windows', type: 'checkbox', visible: process.platform === 'win32' && app.isPackaged && !process.env.PORTABLE_EXECUTABLE_FILE, checked: process.platform === 'win32' && app.getLoginItemSettings().openAtLogin, click: item => app.setLoginItemSettings({ openAtLogin: item.checked }) },
     { type: 'separator' },
     { label: 'Закрыть виджет', click: () => app.quit() }
@@ -67,14 +65,16 @@ function trayImage() {
 async function start() {
   try { const saved = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'widget.json'), 'utf8')); if (saved && typeof saved === 'object') settings = saved; } catch {}
   Object.assign(settings, preferences(settings));
-  const display = screen.getDisplayMatching(clampBounds(settings.bounds, screen.getAllDisplays(), settings.scale));
-  settings.scale = Math.min(settings.scale, display.workArea.width / SIZE.width, display.workArea.height / SIZE.height);
-  window = new BrowserWindow({ ...clampBounds(settings.bounds, screen.getAllDisplays(), settings.scale), transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  const initial = layoutForDisplays(settings.bounds, screen.getAllDisplays(), settings.scale);
+  effectiveScale = initial.scale;
+  window = new BrowserWindow({ ...initial.bounds, transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   window.setAlwaysOnTop(true, 'screen-saver');
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  window.webContents.setZoomFactor(settings.scale);
+  window.webContents.setZoomFactor(effectiveScale);
   window.on('moved', () => { settings.bounds = window.getBounds(); save(); });
-  screen.on('display-removed', () => setPreferences({ scale: settings.scale }));
+  placement = watchDisplays(window, screen, { getScale: () => preferences(settings).scale, onLayout: layout => {
+    effectiveScale = layout.scale; settings.bounds = layout.bounds; save(); publish();
+  } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
   const authorized = event => event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame;
@@ -110,5 +110,5 @@ async function start() {
   media.on('state', value => { const changed = value.connected !== state.connected; state = value; publish(); if (changed) updateTray(); });
   media.start();
 }
-app.on('before-quit', () => { clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings.bounds = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } media?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
+app.on('before-quit', () => { placement?.dispose(); clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings.bounds = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } media?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
 app.on('window-all-closed', () => app.quit());
