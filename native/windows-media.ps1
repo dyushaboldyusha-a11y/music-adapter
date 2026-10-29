@@ -17,13 +17,22 @@ try {
     Add-Type -TypeDefinition @'
 using System;
 using System.Collections.Concurrent;
+using System.IO;
+using System.Text;
 using System.Threading;
 public static class MusicAdapterInput {
     public static readonly ConcurrentQueue<string> Lines = new ConcurrentQueue<string>();
     public static volatile bool Closed;
     public static void Start() {
         var thread = new Thread(() => {
-            try { string line; while ((line = Console.In.ReadLine()) != null) Lines.Enqueue(line); }
+            try {
+                // Windows PowerShell's console reader can interpret redirected
+                // input. Read the original pipe as UTF-8 instead.
+                using (var reader = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false), true)) {
+                    string line;
+                    while ((line = reader.ReadLine()) != null) Lines.Enqueue(line);
+                }
+            }
             finally { Closed = true; }
         });
         thread.IsBackground = true;
