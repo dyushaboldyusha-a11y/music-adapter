@@ -8,19 +8,30 @@ function Read-Artwork($Properties, [string]$Key) {
     $script:ArtworkError = $null
     $stream = $null
     $reader = $null
+    $memory = $null
     try {
         if ($null -eq $Properties.Thumbnail) { return $null }
         $stream = Await-WinRT ($Properties.Thumbnail.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
-        # Explicitly project the required interfaces. The content-type interface
-        # does not reliably expose inherited stream members to PowerShell 5.1.
-        $random = [Windows.Storage.Streams.IRandomAccessStream]$stream
-        $size = [long]$random.Size
-        if ($size -le 0 -or $size -gt 8000000) { throw ('Unsupported thumbnail size: ' + $size) }
-        $reader = [Windows.Storage.Streams.DataReader]::new($random.GetInputStreamAt(0))
-        $loaded = Await-WinRT ($reader.LoadAsync([uint32]$size)) ([uint32])
-        if ($loaded -ne $size) { throw ('Incomplete thumbnail: ' + $loaded + '/' + $size) }
-        $bytes = [byte[]]::new([int]$loaded)
-        $reader.ReadBytes($bytes)
+        # PowerShell cannot directly project this COM interface. Use the .NET
+        # WinRT stream adapter through reflection, as for IAsyncOperation above.
+        $adapter = [System.IO.WindowsRuntimeStreamExtensions].GetMethods() | Where-Object {
+            $_.Name -eq 'AsStream' -and $_.GetParameters().Count -eq 1 -and
+            $_.GetParameters()[0].ParameterType.Name -eq 'IRandomAccessStream'
+        } | Select-Object -First 1
+        if ($null -eq $adapter) { throw 'Windows Runtime stream adapter is unavailable.' }
+        $reader = $adapter.Invoke($null, @($stream))
+        $memory = [IO.MemoryStream]::new()
+        $buffer = [byte[]]::new(65536)
+        while ($true) {
+            $read = $reader.ReadAsync($buffer, 0, $buffer.Length)
+            if (-not $read.Wait(3500)) { throw 'Thumbnail read timed out.' }
+            $count = $read.Result
+            if ($count -eq 0) { break }
+            if ($memory.Length + $count -gt 8000000) { throw 'Thumbnail exceeds 8 MB.' }
+            $memory.Write($buffer, 0, $count)
+        }
+        $bytes = $memory.ToArray()
+        $loaded = $bytes.Length
         # Some media clients supply an empty or generic ContentType. Detect the
         # image itself instead of rejecting a valid thumbnail on its MIME label.
         $mime = ''
@@ -41,6 +52,7 @@ function Read-Artwork($Properties, [string]$Key) {
         # WinRT projections do not always expose Dispose as a public method.
         # Even a failed cleanup must never escape and disconnect the player.
         try { if ($null -ne $reader) { ([IDisposable]$reader).Dispose() } } catch {}
+        try { if ($null -ne $memory) { $memory.Dispose() } } catch {}
         try { if ($null -ne $stream) { ([IDisposable]$stream).Dispose() } } catch {}
     }
     return $script:Artwork
