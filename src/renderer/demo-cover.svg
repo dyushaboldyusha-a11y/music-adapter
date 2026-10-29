@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+ <defs>
+  <linearGradient id="b" x2=".8" y2="1"><stop stop-color="#a32936"/><stop offset=".5" stop-color="#59101e"/><stop offset="1" stop-color="#160d17"/></linearGradient>
+  <radialGradient id="r"><stop stop-color="#e44945" stop-opacity=".65"/><stop offset="1" stop-color="#790f24" stop-opacity="0"/></radialGradient>
+  <filter id="grain"><feTurbulence baseFrequency=".8" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope=".13"/></feComponentTransfer><feBlend in="SourceGraphic" mode="soft-light"/></filter>
+ </defs>
+ <g filter="url(#grain)"><path fill="url(#b)" d="M0 0h400v400H0z"/><ellipse cx="270" cy="80" rx="210" ry="200" fill="url(#r)"/>
+ <g stroke="#200c16" stroke-linecap="round" opacity=".6"><path d="M40 0v400m48-400 9 400M326 0l-21 400M369 0l-11 400" stroke-width="21"/><path d="m38 120 81-73M88 188 4 100m322-4 74-57m-88 184 85-111" stroke-width="9"/></g>
+ <path d="M74 400c2-61 27-83 60-103l-9-50-17-21 4-28-12-21 15-17-1-32 21-7 12-23 22 6 25-19 24 13 21-6 18 22 28 7 9 24 26 18-5 24 18 18-22 20-28 4-10 30 13 23-30 29c38 25 49 54 53 91Z" fill="#100c13"/>
+ <path d="m252 160 17 21 16 7-8 17-27 4-17-17m-80 105c26 12 53 7 73-5" fill="none" stroke="#501521" stroke-width="4" opacity=".65"/>
+ <path d="m84 400 62-80 66 55 25-53 76 78" fill="#170e18"/><path d="M29 0v400M379 0v400" stroke="#d65552" opacity=".15" stroke-width="2"/>
+ </g>
+</svg>

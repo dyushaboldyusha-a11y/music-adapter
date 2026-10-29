@@ -1,0 +1,35 @@
+{
+  "name": "music-adapter",
+  "version": "0.1.0",
+  "description": "Прозрачный виджет поверх окон для приложения Яндекс Музыки",
+  "author": "music-adapter",
+  "license": "MIT",
+  "private": true,
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "demo": "electron . --demo",
+    "test": "node --test --test-isolation=none test/*.test.cjs",
+    "test:gui": "node scripts/smoke-gui.mjs",
+    "check:windows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/check-windows.ps1",
+    "dist:win": "electron-builder --win portable --x64",
+    "pack:win": "electron-builder --win --dir --x64"
+  },
+  "devDependencies": {
+    "electron": "45.1.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "io.musicadapter.widget",
+    "productName": "Music Adapter",
+    "asar": true,
+    "directories": { "output": "release" },
+    "files": ["src/**/*", "package.json"],
+    "extraResources": [{ "from": "native/windows-media.ps1", "to": "windows-media.ps1" }],
+    "win": {
+      "target": [{ "target": "portable", "arch": ["x64"] }],
+      "signAndEditExecutable": false,
+      "artifactName": "Music-Adapter-${version}-Windows.${ext}"
+    }
+  }
+}
