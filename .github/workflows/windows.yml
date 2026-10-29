@@ -3,6 +3,16 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the validated Windows executable to GitHub Releases
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   windows:
     runs-on: windows-latest
@@ -16,7 +26,42 @@ jobs:
       - run: npm test
       - run: npm run check:windows
       - run: npm run dist:win
+        env:
+          ELECTRON_BUILDER_COMPRESSION_LEVEL: '3'
+      - name: Generate checksum
+        shell: pwsh
+        run: |
+          $file = Get-Item release/Music-Adapter-0.1.0-Windows.exe
+          $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($file.Name)" | Set-Content release/SHA256SUMS.txt -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
           name: Music-Adapter-Windows
-          path: release/*.exe
+          path: |
+            release/*.exe
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+  release:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: Music-Adapter-Windows
+          path: release
+      - name: Upload and publish validated release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! gh release view v0.1.0 >/dev/null 2>&1; then
+            gh release create v0.1.0 --draft --target "$GITHUB_SHA" --title 'Music Adapter 0.1.0' --notes-file docs/RELEASE_NOTES.md
+          fi
+          gh release upload v0.1.0 release/Music-Adapter-0.1.0-Windows.exe release/SHA256SUMS.txt --clobber
+          gh release edit v0.1.0 --target "$GITHUB_SHA" --title 'Music Adapter 0.1.0 — виджет Яндекс Музыки' --notes-file docs/RELEASE_NOTES.md --draft=false --latest
