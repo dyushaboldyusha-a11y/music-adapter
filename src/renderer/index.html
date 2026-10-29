@@ -15,29 +15,33 @@
     <symbol id="i-previous" viewBox="0 0 24 24"><path d="m19 5-11 7 11 7Z" fill="currentColor" stroke="none"/><path d="M6 5v14" stroke-width="2.8"/></symbol>
     <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M3 6h2c6 0 8 12 14 12h2m-4-4 4 4-4 4M3 18h2c2.2 0 4-1.8 5.5-4.2M14 8.2C15.6 6.7 17.2 6 19 6h2m-4-4 4 4-4 4"/></symbol>
     <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m16 2 4 4-4 4M4 11V9a3 3 0 0 1 3-3h13M8 22l-4-4 4-4m12-1v2a3 3 0 0 1-3 3H4"/></symbol>
-    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></symbol>
     <symbol id="i-more" viewBox="0 0 24 24"><circle cx="4" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="20" cy="12" r="1.7" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></symbol>
     <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="5.5" cy="18.5" rx="3.5" ry="2.5"/><ellipse cx="16.5" cy="16.5" rx="3.5" ry="2.5"/></symbol>
   </svg>
   <main class="widget" id="widget" aria-label="Виджет Яндекс Музыки">
+    <div class="widget-surface" aria-hidden="true"></div>
     <svg class="edge-waves" viewBox="0 0 616 234" preserveAspectRatio="none" aria-hidden="true">
       <defs>
-        <path id="edge-wave-near" d="M36 16C98 7 145 24 210 16S330 8 392 16S505 24 577 16Q603 13 600 40C593 84 608 132 600 181Q603 221 575 218C506 209 461 228 394 218S274 209 210 218S96 225 38 218Q12 221 16 191C24 141 7 90 16 42Q13 13 36 16Z"/>
-        <path id="edge-wave-far" d="M36 11C110 23 162 1 230 11S352 23 425 11S529 3 579 11Q609 7 606 39C596 92 615 140 606 186Q610 227 578 224C511 235 455 213 387 224S263 234 195 224S89 214 35 224Q5 229 10 191C1 136 22 93 10 43Q7 7 36 11Z"/>
+        <mask id="outside-frame" maskUnits="userSpaceOnUse" x="0" y="0" width="616" height="234">
+          <rect width="616" height="234" fill="white"/>
+          <rect x="16" y="16" width="584" height="202" rx="19" fill="black"/>
+        </mask>
+        <path id="edge-wave-ring" d="M36 9C102 2 160 13 230 8S350 2 420 8S530 14 580 9Q608 7 607 36C612 90 602 145 608 192Q611 226 579 226C510 231 456 220 386 226S260 232 192 226S86 221 36 226Q7 229 9 194C3 138 14 90 9 40Q5 6 36 9Z"/>
       </defs>
-      <g class="wave-glow">
-        <use class="edge-wave" href="#edge-wave-near"/>
-        <use class="edge-wave edge-wave--far" href="#edge-wave-far"/>
+      <g mask="url(#outside-frame)">
+        <use class="wave-glow" href="#edge-wave-ring"/>
+        <use class="edge-wave" href="#edge-wave-ring"/>
       </g>
-      <use class="edge-wave" href="#edge-wave-near"/>
-      <use class="edge-wave edge-wave--far" href="#edge-wave-far"/>
     </svg>
     <div class="drag-surface" aria-hidden="true"></div>
-    <div class="cover" id="cover">
-      <img id="artwork" alt="Обложка альбома" hidden>
-      <div class="cover-placeholder" id="cover-placeholder"><svg><use href="#i-music"/></svg><span>Яндекс Музыка</span></div>
-      <span class="cover-shine"></span>
+    <div class="artwork-column">
+      <div class="cover" id="cover">
+        <img id="artwork" alt="Обложка альбома" hidden>
+        <div class="cover-placeholder" id="cover-placeholder"><svg><use href="#i-music"/></svg></div>
+        <span class="cover-shine"></span>
+      </div>
+      <span class="signature">Liberty</span>
     </div>
     <section class="player" aria-label="Воспроизведение">
       <div class="track-row">
@@ -45,7 +49,6 @@
           <h1 id="title">Яндекс Музыка</h1>
           <p id="artist">Подключение к приложению…</p>
         </div>
-        <button class="icon-button heart" disabled aria-label="Добавить в любимое" title="Лайки доступны в самом приложении Яндекс Музыки: Windows не передаёт эту команду"><svg><use href="#i-heart"/></svg></button>
         <button class="icon-button more" id="menu" aria-label="Настройки виджета" title="Настройки"><svg><use href="#i-more"/></svg></button>
       </div>
       <div class="timeline">
@@ -60,13 +63,11 @@
         <button class="icon-button secondary" id="repeat" aria-label="Повтор" aria-pressed="false" disabled><svg><use href="#i-repeat"/></svg><span class="repeat-one" id="repeat-one" hidden>1</span></button>
       </div>
     </section>
-    <div class="connection" id="connection" hidden><span class="connection-dot"></span><button id="open-music">Откройте Яндекс Музыку и включите трек</button></div>
   </main>
   <footer class="widget-footer">
     <span class="demo-label" id="demo-label" hidden>ДЕМО · без подключения</span>
     <span class="mode-hint" id="mode-hint"><svg><use href="#i-move"/></svg><span id="mode-text">Перетащите за обложку или название</span><kbd>Num 8</kbd><span id="key-hint">закрепить</span></span>
   </footer>
-  <div id="toast" class="toast" role="status" hidden></div>
   <script src="renderer.js"></script>
 </body>
 </html>

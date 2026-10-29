@@ -1,6 +1,6 @@
 {
   "name": "music-adapter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Прозрачный виджет поверх окон для приложения Яндекс Музыки",
   "author": "music-adapter",
   "license": "MIT",
@@ -25,7 +25,7 @@
     "asar": true,
     "directories": { "output": "release" },
     "files": ["src/**/*", "package.json"],
-    "extraResources": [{ "from": "native/windows-media.ps1", "to": "windows-media.ps1" }],
+    "extraResources": [{ "from": "native", "to": "native", "filter": ["**/*.ps1"] }],
     "win": {
       "target": [{ "target": "portable", "arch": ["x64"] }],
       "signAndEditExecutable": false,

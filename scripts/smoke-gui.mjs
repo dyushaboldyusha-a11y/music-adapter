@@ -53,7 +53,8 @@ try {
     const item = pending.get(reply.id);
     if (item) { clearTimeout(item.timer); pending.delete(reply.id); reply.error ? item.reject(new Error(JSON.stringify(reply.error))) : item.resolve(reply.result); }
   });
-  await waitFor('document.getElementById("title").textContent === "After Dark"');
+  await waitFor('document.getElementById("title")?.textContent === "After Dark"');
+  await evaluate('window.musicWidget.setPreferences({opacity:1,scale:1})');
   assert.equal(await evaluate('typeof require'), 'undefined', 'Node must stay isolated from the renderer');
   assert.equal(await evaluate('window.musicWidget.getState().then(s => s.demo)'), true);
   await evaluate('document.getElementById("play-pause").click()');
@@ -75,7 +76,29 @@ try {
   assert.equal(blocked.ok, false, 'Pinned widget must reject media actions');
   await evaluate('window.musicWidget.toggleInteraction()');
   await waitFor('!document.body.classList.contains("locked")');
-  assert.equal(await evaluate('document.querySelector(".heart").disabled'), true);
+  assert.equal(await evaluate('document.querySelector(".heart")'), null, 'Unsupported favorite button must be removed');
+  assert.equal(await evaluate('document.querySelector(".signature").textContent'), 'Liberty');
+  await evaluate('window.musicWidget.setPreferences({opacity:.25})');
+  await waitFor('getComputedStyle(document.querySelector(".widget-surface")).opacity === "0.25"');
+  const opacities = await evaluate('Object.fromEntries([".cover",".edge-waves",".player","#title","#artist","#play-pause",".timeline"].map(s=>[s,getComputedStyle(document.querySelector(s)).opacity]))');
+  assert.equal(opacities['.cover'], '0.25'); assert.equal(opacities['.edge-waves'], '0.25');
+  for (const selector of ['.player', '#title', '#artist', '#play-pause', '.timeline']) assert.equal(opacities[selector], '1', selector + ' must remain opaque');
+  const scaled = await evaluate('window.musicWidget.setPreferences({scale:1.5})');
+  assert.equal(scaled.ok, true);
+  await pause(100);
+  const metrics = await call('Page.getLayoutMetrics');
+  assert.equal(metrics.cssLayoutViewport.clientWidth, 620, 'Scaling must preserve the widget layout');
+  await evaluate('window.musicWidget.setPreferences({opacity:1,scale:1})');
+  await evaluate('(async()=>{const s=await musicWidget.getState();update({...s,error:"Windows could not read the session",capabilities:{...s.capabilities,next:false,shuffle:false,repeat:false}})})()');
+  assert.equal(await evaluate('document.querySelector("#toast")'), null, 'Errors must not create an overlay banner');
+  for (const id of ['next', 'shuffle', 'repeat']) assert.equal(await evaluate(`document.getElementById("${id}").hidden`), true, 'Unavailable actions must be hidden');
+  await evaluate('(async()=>update(await musicWidget.getState()))()');
+  await evaluate('(async()=>{const s=await musicWidget.getState();update({...s,demo:false,artwork:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQ0AAAAASUVORK5CYII="})})()');
+  await waitFor('document.getElementById("artwork").naturalWidth === 1 && !document.getElementById("artwork").hidden');
+  await evaluate('(async()=>update(await musicWidget.getState()))()');
+  assert.equal(await evaluate('getComputedStyle(document.querySelector(".edge-wave")).strokeDasharray'), 'none', 'The wave must be continuous');
+  const waveMask = await evaluate('document.querySelector(".edge-waves g").getAttribute("mask")');
+  assert.equal(waveMask, 'url(#outside-frame)');
   const dimensions = await evaluate('({h:innerHeight,bottom:document.querySelector(".widget-footer").getBoundingClientRect().bottom})');
   assert.ok(dimensions.bottom <= dimensions.h, 'Footer must fit in the transparent window');
   await mkdir(join(root, 'artifacts'), { recursive: true });
@@ -87,7 +110,7 @@ try {
   await evaluate('document.documentElement.style.background = "radial-gradient(ellipse at 80% 10%, #433440, transparent 75%), linear-gradient(130deg, #171d29, #2b1e2a 55%, #15131d)"');
   const screenshot = await call('Page.captureScreenshot', { format: 'png' });
   await writeFile(join(root, 'artifacts/widget-demo.png'), Buffer.from(screenshot.data, 'base64'));
-  console.log('PASS: real Electron UI, isolated renderer, pause, track changes, seek, shuffle, repeat, interaction lock and screenshot.');
+  console.log('PASS: real Electron UI, transport, scaling, selective 25% opacity, Liberty, artwork decoding, hidden unavailable actions, no error banner and continuous masked wave.');
 } finally {
   socket?.close();
   for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error('Test closed')); }

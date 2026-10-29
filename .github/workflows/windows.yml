@@ -31,7 +31,8 @@ jobs:
       - name: Generate checksum
         shell: pwsh
         run: |
-          $file = Get-Item release/Music-Adapter-0.1.0-Windows.exe
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $file = Get-Item "release/Music-Adapter-$version-Windows.exe"
           $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $($file.Name)" | Set-Content release/SHA256SUMS.txt -Encoding ascii
       - uses: actions/upload-artifact@v4
@@ -60,8 +61,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          if ! gh release view v0.1.0 >/dev/null 2>&1; then
-            gh release create v0.1.0 --draft --target "$GITHUB_SHA" --title 'Music Adapter 0.1.0' --notes-file docs/RELEASE_NOTES.md
+          version="$(node -p "require('./package.json').version")"
+          tag="v$version"
+          asset="release/Music-Adapter-$version-Windows.exe"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "Music Adapter $version" --notes-file docs/RELEASE_NOTES.md
           fi
-          gh release upload v0.1.0 release/Music-Adapter-0.1.0-Windows.exe release/SHA256SUMS.txt --clobber
-          gh release edit v0.1.0 --target "$GITHUB_SHA" --title 'Music Adapter 0.1.0 — виджет Яндекс Музыки' --notes-file docs/RELEASE_NOTES.md --draft=false --latest
+          gh release upload "$tag" "$asset" release/SHA256SUMS.txt --clobber
+          gh release edit "$tag" --target "$GITHUB_SHA" --title "Music Adapter $version — Liberty" --notes-file docs/RELEASE_NOTES.md --draft=false --latest

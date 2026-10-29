@@ -2,7 +2,7 @@ const { app, BrowserWindow, globalShortcut, ipcMain, Menu, Tray, nativeImage, sc
 const fs = require('node:fs');
 const path = require('node:path');
 const { WindowsMedia, DemoMedia, EMPTY_STATE, validateCommand } = require('./media.cjs');
-const { clampBounds } = require('./window-state.cjs');
+const { SIZE, preferences, clampBounds } = require('./window-state.cjs');
 const demo = process.argv.includes('--demo');
 let window, tray, media, saveTimer;
 let settings = {}, interaction = true, shortcutAvailable = false, state = { ...EMPTY_STATE };
@@ -14,7 +14,7 @@ else {
 }
 
 function publish() { if (window && !window.isDestroyed()) window.webContents.send('widget:state', snapshot()); }
-function snapshot() { return { ...state, interaction, shortcutAvailable, demo, platform: process.platform }; }
+function snapshot() { return { ...state, interaction, shortcutAvailable, demo, preferences: preferences(settings), platform: process.platform }; }
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch (error) { console.error('Cannot save preferences', error.message); } }, 250); }
 function setInteraction(enabled) {
   interaction = enabled;
@@ -24,13 +24,26 @@ function setInteraction(enabled) {
   else window.blur();
   publish(); updateTray();
 }
+function setPreferences(update) {
+  if (!update || typeof update !== 'object' || Object.keys(update).some(key => !['opacity', 'scale'].includes(key)) || Object.values(update).some(value => !Number.isFinite(value))) throw new Error('Некорректные настройки');
+  const next = preferences({ ...preferences(settings), ...update });
+  const area = screen.getDisplayMatching(window.getBounds()).workArea;
+  next.scale = Math.min(next.scale, area.width / SIZE.width, area.height / SIZE.height);
+  Object.assign(settings, next);
+  window.setBounds(clampBounds(window.getBounds(), screen.getAllDisplays(), next.scale));
+  window.webContents.setZoomFactor(next.scale);
+  settings.bounds = window.getBounds();
+  save(); publish(); updateTray();
+}
 function menu() {
   return Menu.buildFromTemplate([
     { label: interaction ? 'Закрепить · пропускать клики (Num8)' : 'Управлять и перемещать (Num8)', click: () => setInteraction(!interaction) },
     { label: 'Открыть Яндекс Музыку', click: openMusic },
     { type: 'separator' },
-    { label: 'Непрозрачность', submenu: [0.65, 0.85, 1].map(opacity => ({ label: `${Math.round(opacity * 100)}%`, type: 'radio', checked: (settings.opacity || 1) === opacity, click: () => { settings.opacity = opacity; window.setOpacity(opacity); save(); } })) },
-    { label: 'Вернуть в угол экрана', click: () => { window.setBounds(clampBounds(null, [screen.getPrimaryDisplay()])); } },
+    { label: 'Непрозрачность оформления', submenu: [.25, .4, .5, .65, .85, 1].map(opacity => ({ label: `${Math.round(opacity * 100)}%`, type: 'radio', checked: preferences(settings).opacity === opacity, click: () => setPreferences({ opacity }) })) },
+    { label: 'Масштаб · Ctrl + колесо', submenu: [.5, .65, .75, 1, 1.25, 1.5, 1.75].map(scale => ({ label: `${Math.round(scale * 100)}%`, type: 'radio', checked: Math.abs(preferences(settings).scale - scale) < .01, click: () => setPreferences({ scale }) })) },
+    { label: state.connected ? 'Яндекс Музыка подключена' : 'Ожидание Яндекс Музыки', enabled: false },
+    { label: 'Вернуть в угол экрана', click: () => { window.setBounds(clampBounds(null, [screen.getPrimaryDisplay()], preferences(settings).scale)); } },
     { label: 'Запускать с Windows', type: 'checkbox', visible: process.platform === 'win32' && app.isPackaged && !process.env.PORTABLE_EXECUTABLE_FILE, checked: process.platform === 'win32' && app.getLoginItemSettings().openAtLogin, click: item => app.setLoginItemSettings({ openAtLogin: item.checked }) },
     { type: 'separator' },
     { label: 'Закрыть виджет', click: () => app.quit() }
@@ -52,17 +65,24 @@ function trayImage() {
   return nativeImage.createFromBitmap(pixels, { width: 32, height: 32 });
 }
 async function start() {
-  try { settings = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'widget.json'), 'utf8')); } catch {}
-  window = new BrowserWindow({ ...clampBounds(settings.bounds, screen.getAllDisplays()), transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  try { const saved = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'widget.json'), 'utf8')); if (saved && typeof saved === 'object') settings = saved; } catch {}
+  Object.assign(settings, preferences(settings));
+  const display = screen.getDisplayMatching(clampBounds(settings.bounds, screen.getAllDisplays(), settings.scale));
+  settings.scale = Math.min(settings.scale, display.workArea.width / SIZE.width, display.workArea.height / SIZE.height);
+  window = new BrowserWindow({ ...clampBounds(settings.bounds, screen.getAllDisplays(), settings.scale), transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   window.setAlwaysOnTop(true, 'screen-saver');
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  window.setOpacity([0.65, 0.85, 1].includes(settings.opacity) ? settings.opacity : 1);
+  window.webContents.setZoomFactor(settings.scale);
   window.on('moved', () => { settings.bounds = window.getBounds(); save(); });
-  screen.on('display-removed', () => window.setBounds(clampBounds(window.getBounds(), screen.getAllDisplays())));
+  screen.on('display-removed', () => setPreferences({ scale: settings.scale }));
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
   const authorized = event => event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame;
   ipcMain.handle('widget:get-state', event => authorized(event) ? snapshot() : null);
+  ipcMain.handle('widget:preferences', (event, update) => {
+    try { if (!authorized(event) || !interaction) throw new Error('Включите управление клавишей Num8'); setPreferences(update); return { ok: true, preferences: preferences(settings) }; }
+    catch (error) { return { ok: false, error: error.message }; }
+  });
   ipcMain.handle('widget:command', async (event, command, value) => {
     try {
       if (!authorized(event) || !interaction) throw new Error('Включите управление клавишей Num8');
@@ -85,9 +105,9 @@ async function start() {
   window.showInactive();
   setInteraction(interaction);
   if (demo) media = new DemoMedia();
-  else if (process.platform === 'win32') media = new WindowsMedia(app.isPackaged ? path.join(process.resourcesPath, 'windows-media.ps1') : path.join(__dirname, '../native/windows-media.ps1'));
+  else if (process.platform === 'win32') media = new WindowsMedia(app.isPackaged ? path.join(process.resourcesPath, 'native/windows-media.ps1') : path.join(__dirname, '../native/windows-media.ps1'));
   else { state = { ...EMPTY_STATE, error: 'Прямая связь с приложением Яндекс Музыки поддерживается в Windows 10/11. Для просмотра интерфейса: npm run demo.' }; publish(); return; }
-  media.on('state', value => { state = value; publish(); });
+  media.on('state', value => { const changed = value.connected !== state.connected; state = value; publish(); if (changed) updateTray(); });
   media.start();
 }
 app.on('before-quit', () => { clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings.bounds = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } media?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });

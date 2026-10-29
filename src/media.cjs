@@ -14,7 +14,7 @@ function validateCommand(command, value) {
 
 function normalizeState(input = {}) {
   const numeric = value => Number.isFinite(value) && value >= 0 ? value : 0;
-  const artwork = typeof input.artwork === 'string' && /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/.test(input.artwork) && input.artwork.length < 6_000_000 ? input.artwork : null;
+  const artwork = typeof input.artwork === 'string' && /^data:image\/(png|jpe?g|webp|gif|bmp);base64,[A-Za-z0-9+/=]+$/i.test(input.artwork) && input.artwork.length < 12_000_000 ? input.artwork : null;
   return { ...EMPTY_STATE, connected: input.connected === true, title: String(input.title || '').slice(0, 500), artist: String(input.artist || '').slice(0, 500), album: String(input.album || '').slice(0, 500), artwork, playing: input.playing === true, position: Math.min(numeric(input.position), numeric(input.duration)), duration: numeric(input.duration), shuffle: input.shuffle === true, repeat: ['none', 'track', 'list'].includes(input.repeat) ? input.repeat : 'none', capabilities: Object.fromEntries([...COMMANDS].map(key => [key, input.capabilities?.[key] === true])), error: input.error ? String(input.error).slice(0, 500) : null };
 }
 

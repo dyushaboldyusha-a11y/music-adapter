@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizeState, validateCommand, DemoMedia } = require('../src/media.cjs');
-const { clampBounds } = require('../src/window-state.cjs');
+const { clampBounds, preferences } = require('../src/window-state.cjs');
 
 test('rejects invalid IPC actions and nonfinite seek values', () => {
   for (const command of ['eval', 'openExternal', '__proto__', null]) assert.throws(() => validateCommand(command));
@@ -37,4 +37,18 @@ test('keeps a saved widget reachable when a display is unplugged or has negative
   const result = clampBounds({ x: 1900, y: 2000 }, [primary]);
   assert.equal(result.x, 1300); assert.equal(result.y, 770);
   assert.equal(clampBounds({ x: NaN, y: Infinity }, [primary]).x, 1276);
+});
+test('limits decoration opacity to 25–100 percent and scales the entire widget', () => {
+  assert.deepEqual(preferences({ opacity: .01, scale: 9 }), { opacity: .25, scale: 1.75 });
+  assert.deepEqual(preferences({ opacity: NaN, scale: Infinity }), { opacity: 1, scale: 1 });
+  const display = { workArea: { x: 0, y: 0, width: 1920, height: 1080 } };
+  const large = clampBounds({ x: 1700, y: 1000 }, [display], 1.5);
+  assert.deepEqual(large, { width: 930, height: 405, x: 990, y: 675 });
+});
+test('accepts common native thumbnail formats while rejecting remote or executable image data', () => {
+  for (const mime of ['png', 'jpeg', 'webp', 'gif', 'bmp']) {
+    const data = `data:image/${mime};base64,aGVsbG8=`;
+    assert.equal(normalizeState({ artwork: data }).artwork, data);
+  }
+  assert.equal(normalizeState({ artwork: 'data:image/svg+xml;base64,aGVsbG8=' }).artwork, null);
 });

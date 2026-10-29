@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('musicWidget', {
   getState: () => ipcRenderer.invoke('widget:get-state'),
+  setPreferences: update => ipcRenderer.invoke('widget:preferences', update),
   command: (command, value) => ipcRenderer.invoke('widget:command', command, value),
   showMenu: () => ipcRenderer.send('widget:menu'),
   toggleInteraction: () => ipcRenderer.send('widget:toggle-interaction'),
