@@ -14,7 +14,7 @@ try {
     $timeline = [pscustomobject]@{ StartTime = [TimeSpan]::Zero; EndTime = [TimeSpan]::FromSeconds(258); Position = [TimeSpan]::FromSeconds(84); LastUpdatedTime = [DateTime]::UtcNow }
     $state = ConvertTo-PlayerState $properties $info $timeline 'YandexMusic.exe'
     if (-not $state.connected -or $state.title -ne 'Track') { throw 'Thumbnail read erased track metadata.' }
-    if ($state.artwork -ne ('data:image/png;base64,' + [Convert]::ToBase64String($png))) { throw 'Real WinRT artwork did not round-trip as PNG.' }
+    if ($state.artwork -ne ('data:image/png;base64,' + [Convert]::ToBase64String($png))) { throw ('Real WinRT artwork did not round-trip as PNG: ' + $script:ArtworkError) }
     if ($state.position -lt 84 -or $state.duration -ne 258 -or -not $state.capabilities.playPause) { throw 'Timeline or transport was lost.' }
     $failed = [pscustomobject]@{}
     $failed | Add-Member ScriptMethod OpenReadAsync { throw 'Thumbnail temporarily unavailable.' }

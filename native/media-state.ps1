@@ -1,20 +1,24 @@
 $script:ArtKey = ''
 $script:Artwork = $null
+$script:ArtworkError = $null
 
 function Read-Artwork($Properties, [string]$Key) {
     if ($script:ArtKey -eq $Key -and $script:Artwork) { return $script:Artwork }
     $script:Artwork = $null
-    if ($null -eq $Properties.Thumbnail) { return $null }
+    $script:ArtworkError = $null
     $stream = $null
     $reader = $null
     try {
+        if ($null -eq $Properties.Thumbnail) { return $null }
         $stream = Await-WinRT ($Properties.Thumbnail.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
-        $size = [long]$stream.Size
-        if ($size -le 0 -or $size -gt 8000000) { return $null }
-        $stream.Seek(0)
-        $reader = [Windows.Storage.Streams.DataReader]::new($stream)
+        # Explicitly project the required interfaces. The content-type interface
+        # does not reliably expose inherited stream members to PowerShell 5.1.
+        $random = [Windows.Storage.Streams.IRandomAccessStream]$stream
+        $size = [long]$random.Size
+        if ($size -le 0 -or $size -gt 8000000) { throw ('Unsupported thumbnail size: ' + $size) }
+        $reader = [Windows.Storage.Streams.DataReader]::new($random.GetInputStreamAt(0))
         $loaded = Await-WinRT ($reader.LoadAsync([uint32]$size)) ([uint32])
-        if ($loaded -ne $size) { return $null }
+        if ($loaded -ne $size) { throw ('Incomplete thumbnail: ' + $loaded + '/' + $size) }
         $bytes = [byte[]]::new([int]$loaded)
         $reader.ReadBytes($bytes)
         # Some media clients supply an empty or generic ContentType. Detect the
@@ -32,6 +36,7 @@ function Read-Artwork($Properties, [string]$Key) {
     } catch {
         # Thumbnail failures must not erase the track metadata or transport.
         $script:ArtKey = ''
+        $script:ArtworkError = $_.Exception.Message
     } finally {
         # WinRT projections do not always expose Dispose as a public method.
         # Even a failed cleanup must never escape and disconnect the player.
