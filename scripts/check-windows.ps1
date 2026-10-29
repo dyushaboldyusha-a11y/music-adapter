@@ -12,7 +12,6 @@ $info.CreateNoWindow = $true
 $info.RedirectStandardInput = $true
 $info.RedirectStandardOutput = $true
 $info.RedirectStandardError = $true
-$info.StandardInputEncoding = [Text.UTF8Encoding]::new($false)
 $info.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
 $process = [Diagnostics.Process]::Start($info)
 $diagnostics = $process.StandardError.ReadToEndAsync()
@@ -21,8 +20,11 @@ try {
     if (-not $line.Wait(20000)) { throw 'Bridge did not publish a media state.' }
     $state = ConvertFrom-Json $line.Result
     if ($state.type -ne 'state' -or $state.state.error) { throw ('Windows integration failed: ' + $line.Result) }
-    $process.StandardInput.WriteLine('{"id":1,"command":"invalid-command"}')
-    $process.StandardInput.Flush()
+    # .NET Framework does not expose StandardInputEncoding. Write the same
+    # BOM-free UTF-8 bytes as the application's Node.js bridge client.
+    $requestBytes = [Text.Encoding]::UTF8.GetBytes(('{"id":1,"command":"invalid-command"}' + "`n"))
+    $process.StandardInput.BaseStream.Write($requestBytes, 0, $requestBytes.Length)
+    $process.StandardInput.BaseStream.Flush()
     $found = $false
     $received = [Collections.Generic.List[string]]::new()
     for ($i = 0; $i -lt 8; $i++) {
