@@ -19,3 +19,20 @@ test('VK fallback does not invent controls for missing APIs', () => {
   const player = { getCurrentAudio: () => ({ title: 'Track', duration: 60 }), getCurrentProgress: () => ({ currentTime: 15 }) };
   const state = create({ getAudioPlayer: () => player }).snapshot(); assert.equal(state.position, 15); assert.equal(state.capabilities.seek, false); assert.equal(state.capabilities.next, false);
 });
+test('VK private volume keeps the previous level across mute and rejects invalid levels', async () => {
+  let volume = .72;
+  const player = { getCurrentAudio: () => ({ title: 'Track', duration: 60 }), getVolume: () => volume, setVolume: value => { volume = value; } };
+  const adapter = create({ getAudioPlayer: () => player });
+  assert.equal(adapter.snapshot().capabilities.volume, true);
+  await adapter.command('mute', true); assert.equal(volume, 0); assert.equal(adapter.snapshot().muted, true);
+  await adapter.command('mute', false); assert.equal(volume, .72);
+  await adapter.command('volume', .25); assert.equal(volume, .25);
+  await assert.rejects(adapter.command('volume', Infinity)); assert.equal(volume, .25);
+});
+test('an unavailable VK volume API does not erase track metadata or invent a scale', () => {
+  const player = { getCurrentAudio: () => ({ title: 'Track', duration: 60 }), getVolume: () => { throw new Error('not ready'); }, setVolume() {} };
+  const adapter = create({ getAudioPlayer: () => player });
+  assert.equal(adapter.snapshot().title, 'Track'); assert.equal(adapter.snapshot().capabilities.volume, false);
+  player.getVolume = () => 72;
+  assert.equal(adapter.snapshot().capabilities.volume, false);
+});

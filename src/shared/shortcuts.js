@@ -1,6 +1,6 @@
 (function (root) {
-  const DEFAULT_BINDINGS = Object.freeze({ toggleInteraction: 'Control+Shift+8', playPause: 'Control+Shift+Space', next: '', previous: '' });
-  const ACTIONS = Object.freeze({ toggleInteraction: 'Управление виджетом', playPause: 'Пауза / продолжить', next: 'Следующий трек', previous: 'Предыдущий трек' });
+  const DEFAULT_BINDINGS = Object.freeze({ toggleInteraction: 'Control+Shift+8', playPause: 'Control+Shift+Space', next: '', previous: '', volumeUp: '', volumeDown: '', mute: '', toggleCompact: '' });
+  const ACTIONS = Object.freeze({ toggleInteraction: 'Управление виджетом', playPause: 'Пауза / продолжить', next: 'Следующий трек', previous: 'Предыдущий трек', volumeUp: 'Увеличить громкость', volumeDown: 'Уменьшить громкость', mute: 'Выключить / включить звук', toggleCompact: 'Компактный режим' });
   const modifiers = new Map([['control', 'Control'], ['ctrl', 'Control'], ['alt', 'Alt'], ['shift', 'Shift'], ['super', 'Super'], ['meta', 'Super'], ['win', 'Super']]);
   const namedKeys = ['Space', 'Tab', 'Enter', 'Escape', 'Backspace', 'Delete', 'Insert', 'Home', 'End', 'PageUp', 'PageDown', 'Up', 'Down', 'Left', 'Right', 'Plus', 'MediaPlayPause', 'MediaStop', 'MediaNextTrack', 'MediaPreviousTrack', 'VolumeUp', 'VolumeDown', 'VolumeMute', 'numdec', 'numadd', 'numsub', 'nummult', 'numdiv'];
   const names = new Map(namedKeys.map(key => [key.toLowerCase(), key]));

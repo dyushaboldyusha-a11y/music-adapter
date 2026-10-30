@@ -34,6 +34,7 @@ function Update-SessionSources {
             $playing = $false
             try { $playing = $session.GetPlaybackInfo().PlaybackStatus.ToString() -eq 'Playing' } catch {}
             $description.id = $id
+            $description.appId = [string]$session.SourceAppUserModelId
             $description.playing = $playing
             $description.current = $id -eq $currentId
             $next[$id] = $session

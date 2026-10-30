@@ -24,7 +24,7 @@
     if (!media || typeof media.play !== 'function' || trackedMedia.has(media)) return;
     if (trackedMedia.size >= 16) trackedMedia.delete([...trackedMedia].find(el => el.paused || el.ended) || trackedMedia.values().next().value);
     trackedMedia.add(media);
-    for (const name of ['play', 'pause', 'playing', 'waiting', 'stalled', 'seeked', 'durationchange', 'ratechange', 'loadedmetadata', 'ended']) media.addEventListener(name, () => {
+    for (const name of ['play', 'pause', 'playing', 'waiting', 'stalled', 'seeked', 'durationchange', 'ratechange', 'loadedmetadata', 'ended', 'volumechange']) media.addEventListener(name, () => {
       if (name === 'waiting' || name === 'stalled') buffering.add(media);
       if (name === 'playing' || name === 'play') buffering.delete(media);
       if (name === 'seeked') timelineEpoch++;
@@ -74,8 +74,9 @@
       title: metadata?.title || vkState?.title || text(service.title) || document.title.replace(/\s[-–|]\s(YouTube|Spotify|SoundCloud).*$/i, '').slice(0, 200),
       artist: metadata?.artist || vkState?.artist || text(service.artist) || service.name,
       album: metadata?.album || '', artworkUrl, playing, duration, position: Math.max(0, Math.min(duration, position)), live: media?.duration === Infinity,
+      volume: media ? media.volume : vkState?.volume ?? null, muted: media ? media.muted : vkState?.muted === true,
       sampledAt: Date.now(), sampleOrigin, sampleSequence: ++sequence, playbackRate, timelineEpoch,
-      capabilities: { playPause: !!media || !!button(service.play) || handlers.has(playing ? 'pause' : 'play') || !!vkState?.capabilities.playPause, next: handlers.has('nexttrack') || !!button(service.next) || !!vkState?.capabilities.next, previous: handlers.has('previoustrack') || !!button(service.previous) || !!vkState?.capabilities.previous, seek: duration > 0 && (handlers.has('seekto') || !!media?.seekable?.length || !!vkState?.capabilities.seek), shuffle: false, repeat: false }
+      capabilities: { playPause: !!media || !!button(service.play) || handlers.has(playing ? 'pause' : 'play') || !!vkState?.capabilities.playPause, next: handlers.has('nexttrack') || !!button(service.next) || !!vkState?.capabilities.next, previous: handlers.has('previoustrack') || !!button(service.previous) || !!vkState?.capabilities.previous, seek: duration > 0 && (handlers.has('seekto') || !!media?.seekable?.length || !!vkState?.capabilities.seek), shuffle: false, repeat: false, volume: !!media || !!vkState?.capabilities.volume, mute: !!media || !!vkState?.capabilities.mute }
     };
   }
   function publish() { window.postMessage({ channel: 'liberty-player-v1', type: 'state', state: snapshot() }, location.origin); }
@@ -84,7 +85,9 @@
     if (!state?.capabilities[action]) throw new Error('Эта команда недоступна во вкладке');
     const media = mediaElement();
     const nativeAction = action === 'playPause' ? state.playing ? 'pause' : 'play' : ({ next: 'nexttrack', previous: 'previoustrack', seek: 'seekto' })[action];
-    if (handlers.has(nativeAction)) await handlers.get(nativeAction)({ action: nativeAction, ...(action === 'seek' ? { seekTime: Math.max(0, Math.min(state.duration, Number(value))), fastSeek: false } : {}) });
+    if (action === 'volume' && media) { if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error('Некорректная громкость'); media.volume = value; if (value > 0) media.muted = false; }
+    else if (action === 'mute' && media) { if (typeof value !== 'boolean') throw new Error('Некорректное состояние звука'); media.muted = value; }
+    else if (handlers.has(nativeAction)) await handlers.get(nativeAction)({ action: nativeAction, ...(action === 'seek' ? { seekTime: Math.max(0, Math.min(state.duration, Number(value))), fastSeek: false } : {}) });
     else if (action === 'seek' && media && Number.isFinite(value)) media.currentTime = Math.max(0, Math.min(state.duration, value));
     else if (action === 'playPause' && media) { if (state.playing) media.pause(); else await media.play(); }
     else if (vk?.snapshot()?.capabilities[action]) await vk.command(action, value);
@@ -100,7 +103,7 @@
     if (event.source !== window || event.origin !== location.origin || event.data?.channel !== 'liberty-player-v1') return;
     const data = event.data;
     if (data.type === 'refresh') { publish(); return; }
-    if (data.type !== 'command' || !['playPause', 'next', 'previous', 'seek'].includes(data.command) || typeof data.id !== 'string') return;
+    if (data.type !== 'command' || !['playPause', 'next', 'previous', 'seek', 'volume', 'mute'].includes(data.command) || typeof data.id !== 'string') return;
     try { await command(data.command, data.value); window.postMessage({ channel: 'liberty-player-v1', type: 'result', id: data.id, ok: true }, location.origin); }
     catch (error) { window.postMessage({ channel: 'liberty-player-v1', type: 'result', id: data.id, ok: false, error: error.message }, location.origin); }
   });

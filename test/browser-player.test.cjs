@@ -8,7 +8,7 @@ function player(url, media) {
   const messages = [], listeners = [], timers = [], original = new Map();
   let now = 1000;
   class FakeAudio extends EventTarget {
-    constructor() { super(); this.src = this.currentSrc = 'blob:detached'; this.currentTime = 60; this.duration = 180; this.paused = true; this.ended = false; this.muted = false; this.readyState = 4; this.playbackRate = 1; this.seekable = { length: 1 }; }
+    constructor() { super(); this.src = this.currentSrc = 'blob:detached'; this.currentTime = 60; this.duration = 180; this.paused = true; this.ended = false; this.muted = false; this.volume = .65; this.readyState = 4; this.playbackRate = 1; this.seekable = { length: 1 }; }
     async play() { this.paused = false; this.dispatchEvent(new Event('play')); }
     pause() { this.paused = true; this.dispatchEvent(new Event('pause')); }
   }
@@ -56,4 +56,19 @@ test('unsupported controls stay unavailable and live video is represented withou
   assert.equal(p.messages.at(-1).state.live, true); assert.equal(p.messages.at(-1).state.capabilities.next, false);
   await p.command('next'); assert.equal(p.messages.at(-1).ok, false);
   await p.command('playPause'); assert.equal(media.paused, true);
+});
+
+test('volume and mute reach only the selected media element on all five services', async () => {
+  for (const service of api.services) {
+    const p = player(service.url), audio = new p.window.Audio(); await audio.play(); p.publish();
+    assert.equal(p.messages.at(-1).state.volume, .65);
+    assert.equal(p.messages.at(-1).state.capabilities.volume, true);
+    await p.command('volume', .25); assert.equal(audio.volume, .25); assert.equal(audio.muted, false);
+    await p.command('mute', true); assert.equal(audio.muted, true); assert.equal(audio.volume, .25);
+    await p.command('mute', false); assert.equal(audio.muted, false);
+    await p.command('volume', 2); assert.equal(p.messages.at(-1).ok, false); assert.equal(audio.volume, .25);
+    await p.command('mute', 'true'); assert.equal(p.messages.at(-1).ok, false); assert.equal(audio.muted, false);
+  }
+  const p = player('https://open.spotify.com/'); p.publish();
+  assert.equal(p.messages.at(-1).state.capabilities.volume, false, 'Metadata alone must not advertise working volume');
 });

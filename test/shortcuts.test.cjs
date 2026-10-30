@@ -57,7 +57,7 @@ test('a busy legacy Num8 does not prevent saving valid shortcuts without a numpa
 test('0.4.0 bindings migrate without changing existing keys or enabling new global keys', () => {
   const saved = { toggleInteraction: 'F8', playPause: '' };
   const { manager, callbacks } = setup(saved);
-  assert.deepEqual(manager.snapshot().bindings, { ...saved, next: '', previous: '' });
+  assert.deepEqual(manager.snapshot().bindings, { ...DEFAULT_BINDINGS, ...saved });
   assert.deepEqual([...callbacks.keys()], ['F8']);
 });
 test('next and previous dispatch independently and cannot duplicate any existing action', () => {
@@ -67,7 +67,7 @@ test('next and previous dispatch independently and cannot duplicate any existing
   assert.deepEqual(calls, ['next', 'previous']);
   assert.throws(() => manager.configure({ ...bindings, previous: 'F10' }), /разные/);
   assert.throws(() => manager.configure({ ...bindings, next: 'F8' }), /разные/);
-  assert.deepEqual(manager.snapshot().bindings, bindings);
+  assert.deepEqual(manager.snapshot().bindings, { ...DEFAULT_BINDINGS, ...bindings });
   manager.configure({ ...bindings, next: '', previous: '' });
   assert.equal(callbacks.has('F10'), false); assert.equal(callbacks.has('F11'), false);
 });

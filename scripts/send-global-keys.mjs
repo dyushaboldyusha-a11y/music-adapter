@@ -21,7 +21,7 @@ for key in reversed(codes): t.XTestFakeKeyEvent(d, key, 0, 20)
 x.XSync(d, 0); x.XCloseDisplay(d)
 `, JSON.stringify(keys)], { timeout: 10000 });
   } else if (process.platform === 'win32') {
-    const map = { F8: 0x77, F9: 0x78, F10: 0x79, F11: 0x7a, Control_L: 0x11, Alt_L: 0x12, Shift_L: 0x10 };
+    const map = { F5: 0x74, F6: 0x75, F7: 0x76, F8: 0x77, F9: 0x78, F10: 0x79, F11: 0x7a, F12: 0x7b, Control_L: 0x11, Alt_L: 0x12, Shift_L: 0x10 };
     if (keys.some(key => !map[key])) throw new Error('Unsupported Windows test key');
     const codes = keys.map(key => map[key]);
     await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Add-Type 'using System; using System.Runtime.InteropServices; public static class LibertyTestKeys { [DllImport("user32.dll")] public static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra); }'; foreach ($key in @(${codes.join(',')})) { [LibertyTestKeys]::keybd_event($key, 0, 0, [UIntPtr]::Zero) }; foreach ($key in @(${codes.toReversed().join(',')})) { [LibertyTestKeys]::keybd_event($key, 0, 2, [UIntPtr]::Zero) }`], { timeout: 10000 });

@@ -1,10 +1,13 @@
 const $ = id => document.getElementById(id);
-let state = {}, seeking = false, currentArtwork, scaleTimer, sourcesKey = '', pairExpires = 0;
+let state = {}, volumeEditing = false, volumeTimer, volumeSource, seeking = false, currentArtwork, scaleTimer, sourcesKey = '', pairExpires = 0;
 const playbackClock = new LibertyPlaybackClock();
 const bridge = window.musicWidget;
 const shortcutSettings = LibertyShortcutSettings.create(bridge);
 const themeSettings = LibertyThemeSettings.create(bridge);
 const updateSettings = LibertyUpdateSettings.create(bridge);
+const waveSettings = LibertyWaveSettings.create(bridge);
+const audioWave = LibertyAudioWave.create();
+bridge.onAudioLevel(level => audioWave.level(level));
 const formatTime = value => { const total = Math.floor(Math.max(0, value || 0)); return total >= 3600 ? `${Math.floor(total / 3600)}:${String(Math.floor(total / 60) % 60).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}` : `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; };
 async function command(name, value) { if (!state.interaction) return { ok: false }; const result = await bridge.command(name, value); if (!result.ok) console.warn(result.error || 'Не удалось выполнить команду'); return result; }
 function sourceLabel(source) { return `${source.name} · ${source.kind === 'app' ? 'приложение' : source.provider === 'browser' ? 'браузер' : source.browser || 'браузер'}`; }
@@ -26,12 +29,16 @@ function updateSources() {
 function showPairing(pair) { if (!pair.ok && !pair.code) return; pairExpires = pair.expiresAt; $('pair-code').textContent = pair.code; $('copy-code').disabled = false; $('copy-code').textContent = 'Скопировать код'; $('pairing').hidden = false; }
 function update(next) {
   if (!next) return;
+  if (state.source?.id !== next.source?.id || !next.interaction) { clearTimeout(volumeTimer); volumeEditing = false; }
   state = next; playbackClock.update(next);
+  document.body.classList.toggle('compact', state.compact === true);
+  audioWave.update(state.preferences);
   document.documentElement.style.setProperty('--decoration-opacity', String(state.preferences?.opacity ?? 1));
   document.body.classList.toggle('locked', !state.interaction);
   document.body.classList.toggle('connected', !!state.connected);
   $('widget').inert = !state.interaction;
   document.querySelector('.widget-footer').inert = !state.interaction;
+  if (!state.pairingEditing) $('pairing').hidden = true;
   if (!state.interaction) { document.activeElement?.blur(); $('pairing').hidden = true; }
   document.title = `Liberty Wave${state.source ? ' · ' + sourceLabel(state.source) : ''}`;
   $('widget').setAttribute('aria-label', state.source ? `Liberty Wave · ${sourceLabel(state.source)}` : 'Музыкальный виджет Liberty Wave');
@@ -40,6 +47,9 @@ function update(next) {
   $('title').title = state.interaction ? state.title || '' : '';
   $('artist').title = state.interaction ? state.artist || '' : '';
   $('menu').title = state.interaction ? 'Настройки' : '';
+  $('compact-toggle').title = state.interaction ? (state.preferences?.compact ? 'Развернуть виджет' : 'Компактный режим') : '';
+  $('compact-toggle').setAttribute('aria-label', state.preferences?.compact ? 'Развернуть виджет' : 'Компактный режим');
+  $('compact-icon').setAttribute('href', state.preferences?.compact ? '#i-expand' : '#i-compact');
   $('pair-browser').title = state.interaction ? 'Подключить браузер' : '';
   $('demo-label').hidden = !state.demo;
   $('pair-browser').hidden = !state.browserAvailable;
@@ -56,6 +66,14 @@ function update(next) {
     $(id).disabled = !state.connected || !capability[key];
     if (id !== 'seek') $(id).hidden = $(id).disabled;
   }
+  $('volume-controls').hidden = !state.connected || !capability.volume || !Number.isFinite(state.volume);
+  $('volume').disabled = !capability.volume;
+  $('mute').hidden = !capability.mute;
+  $('mute').disabled = !capability.mute;
+  $('mute').setAttribute('aria-pressed', String(!!state.muted));
+  $('mute').setAttribute('aria-label', state.muted ? 'Включить звук' : 'Выключить звук');
+  $('volume-icon').setAttribute('href', state.muted || state.volume === 0 ? '#i-muted' : '#i-volume');
+  if (!volumeEditing) { $('volume').value = Math.round((state.volume ?? 0) * 100); paintVolume(); }
   $('play-icon').setAttribute('href', state.playing ? '#i-pause' : '#i-play');
   $('play-pause').setAttribute('aria-label', state.playing ? 'Пауза' : 'Воспроизвести');
   $('shuffle').setAttribute('aria-pressed', String(!!state.shuffle));
@@ -70,7 +88,8 @@ function update(next) {
   shortcutSettings.update(state);
   themeSettings.update(state);
   updateSettings.update(state);
-  const modalOpen = shortcutSettings.isOpen() || themeSettings.isOpen() || updateSettings.isOpen();
+  waveSettings.update(state);
+  const modalOpen = shortcutSettings.isOpen() || themeSettings.isOpen() || updateSettings.isOpen() || waveSettings.isOpen();
   document.querySelector('.player').inert = modalOpen;
   document.querySelector('.artwork-column').inert = modalOpen;
   document.querySelector('.widget-footer').inert = !state.interaction || modalOpen;
@@ -87,6 +106,18 @@ function paintProgress() {
 $('seek').addEventListener('input', () => { seeking = true; $('elapsed').textContent = formatTime(Number($('seek').value)); $('seek').style.setProperty('--progress', `${Number($('seek').value) / Number($('seek').max) * 100}%`); });
 $('seek').addEventListener('change', async () => { const position = Number($('seek').value); playbackClock.seek(position); seeking = false; paintProgress(); const result = await command('seek', position); if (!result.ok) { playbackClock.rejectSeek(); paintProgress(); } });
 $('seek').addEventListener('pointercancel', () => { seeking = false; paintProgress(); });
+function paintVolume() { $('volume-value').textContent = `${$('volume').value}%`; $('volume').style.setProperty('--progress', `${$('volume').value}%`); }
+async function sendVolume() {
+  clearTimeout(volumeTimer);
+  if (volumeSource !== state.source?.id || !state.interaction) { volumeEditing = false; return; }
+  const result = await command('volume', Number($('volume').value) / 100);
+  volumeEditing = false; if (!result.ok) update(await bridge.getState());
+}
+$('volume').addEventListener('input', () => { volumeEditing = true; volumeSource = state.source?.id; paintVolume(); clearTimeout(volumeTimer); volumeTimer = setTimeout(sendVolume, 120); });
+$('volume').addEventListener('change', sendVolume);
+$('volume').addEventListener('pointercancel', () => { clearTimeout(volumeTimer); volumeEditing = false; bridge.getState().then(update); });
+$('mute').addEventListener('click', () => command('mute', !state.muted));
+$('compact-toggle').addEventListener('click', () => bridge.setPreferences({ compact: !state.preferences?.compact }));
 $('play-pause').addEventListener('click', () => command('playPause'));
 $('previous').addEventListener('click', () => command('previous'));
 $('next').addEventListener('click', () => command('next'));
@@ -96,12 +127,12 @@ $('menu').addEventListener('click', () => bridge.showMenu());
 $('source').addEventListener('change', async () => { if (state.interaction) { const result = await bridge.selectSource($('source').value); if (!result.ok) console.warn(result.error); } });
 $('pair-browser').addEventListener('click', async () => showPairing(await bridge.beginPairing()));
 $('copy-code').addEventListener('click', async () => { await bridge.copyPairingCode(); $('copy-code').textContent = 'Скопировано'; });
-$('close-pair').addEventListener('click', () => { $('pairing').hidden = true; });
+$('close-pair').addEventListener('click', () => bridge.closePairing());
 bridge.onPairing(showPairing);
 $('artwork').addEventListener('error', () => { currentArtwork = null; $('artwork').hidden = true; $('cover-placeholder').hidden = false; });
-document.addEventListener('keydown', event => { if (event.key === 'Escape' && state.interaction) { if (!$('pairing').hidden) $('pairing').hidden = true; else bridge.toggleInteraction(); } });
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && state.interaction) { if (!$('pairing').hidden) bridge.closePairing(); else bridge.toggleInteraction(); } });
 document.addEventListener('wheel', event => {
-  if (!event.ctrlKey || !state.interaction || shortcutSettings.isOpen() || themeSettings.isOpen() || updateSettings.isOpen()) return;
+  if (!event.ctrlKey || !state.interaction || shortcutSettings.isOpen() || themeSettings.isOpen() || updateSettings.isOpen() || waveSettings.isOpen()) return;
   event.preventDefault();
   clearTimeout(scaleTimer);
   const scale = Math.max(.5, Math.min(1.75, (state.preferences?.scale || 1) + (event.deltaY < 0 ? .05 : -.05)));

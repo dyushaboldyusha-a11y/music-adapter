@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { pressGlobalKeys } from './send-global-keys.mjs';
 const require = createRequire(import.meta.url), root = resolve(import.meta.dirname, '..');
+const { DEFAULT_BINDINGS } = require('../src/shared/shortcuts.js');
 const profile = await mkdtemp(join(tmpdir(), 'liberty-settings-'));
 const legacyConfig = await mkdtemp(join(tmpdir(), 'liberty-legacy-profile-'));
 let app, browser;
@@ -94,10 +95,10 @@ try {
   const updateBytes = Buffer.alloc(256); updateBytes.write('MZ'); updateBytes.writeUInt32LE(128, 60); updateBytes.set([80, 69, 0, 0], 128);
   const updateHash = createHash('sha256').update(updateBytes).digest('hex');
   await app.evaluate(({ protocol }, fixture) => {
-    const base = 'https://github.com/dyushaboldyusha-a11y/music-adapter/releases/download/v0.4.2/';
-    const name = 'Liberty-Wave-0.4.2-Windows.exe';
+    const base = 'https://github.com/dyushaboldyusha-a11y/music-adapter/releases/download/v0.6.0/';
+    const name = 'Liberty-Wave-0.6.0-Windows.exe';
     protocol.handle('https', request => {
-      if (request.url.includes('/releases/latest')) return new Response(JSON.stringify({ tag_name: 'v0.4.2', assets: [name, 'SHA256SUMS.txt'].map(name => ({ name, state: 'uploaded', size: name.endsWith('.exe') ? fixture.bytes.length : 128, browser_download_url: base + name })) }));
+      if (request.url.includes('/releases/latest')) return new Response(JSON.stringify({ tag_name: 'v0.6.0', assets: [name, 'SHA256SUMS.txt'].map(name => ({ name, state: 'uploaded', size: name.endsWith('.exe') ? fixture.bytes.length : 128, browser_download_url: base + name })) }));
       if (request.url.endsWith('SHA256SUMS.txt')) return new Response(fixture.hash + '  ' + name + '\n');
       if (request.url === base + name) return new Response(new Uint8Array(fixture.bytes));
       return new Response('not found', { status: 404 });
@@ -124,7 +125,7 @@ try {
   await browser.close(); browser = null;
   await app.close(); app = null;
   const saved = JSON.parse(await readFile(join(profile, 'widget.json'), 'utf8'));
-  assert.equal(saved.color, '#22c55e'); assert.deepEqual(saved.shortcuts, { toggleInteraction: 'F8', playPause: 'F9', next: 'F10', previous: 'F11' });
+  assert.equal(saved.color, '#22c55e'); assert.deepEqual(saved.shortcuts, { ...DEFAULT_BINDINGS, toggleInteraction: 'F8', playPause: 'F9', next: 'F10', previous: 'F11' });
   page = await launch();
   const restored = await page.evaluate(() => musicWidget.getState());
   assert.deepEqual(restored.shortcuts.bindings, saved.shortcuts); assert.equal(restored.preferences.color, '#22c55e');
@@ -138,7 +139,7 @@ try {
     page = await app.firstWindow(); await page.waitForFunction(() => !!window.musicWidget);
     const legacy = await waitState(page, state => state.connected);
     assert.equal(await app.evaluate(({ app }) => app.getPath('userData')), previousProfile);
-    assert.deepEqual(legacy.shortcuts.bindings, { ...previousSettings.shortcuts, next: '', previous: '' }); assert.equal(legacy.preferences.color, saved.color);
+    assert.deepEqual(legacy.shortcuts.bindings, { ...DEFAULT_BINDINGS, ...previousSettings.shortcuts }); assert.equal(legacy.preferences.color, saved.color);
   }
   console.log('PASS: editable shortcuts, busy-key rollback, global keys with another app focused, palette, restart persistence, Liberty Wave identity and preservation of the previous profile.');
 } finally {

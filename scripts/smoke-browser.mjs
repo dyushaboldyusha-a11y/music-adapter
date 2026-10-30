@@ -30,7 +30,7 @@ try {
   await waitState(widget, state => state.interaction === true);
   await widget.evaluate(() => musicWidget.openShortcuts());
   await waitState(widget, state => state.shortcutEditing);
-  assert.equal((await widget.evaluate(() => musicWidget.saveShortcuts({ toggleInteraction: 'F8', playPause: 'F9', next: 'F10', previous: 'F11' }))).ok, true);
+  assert.equal((await widget.evaluate(() => musicWidget.saveShortcuts({ toggleInteraction: 'F8', playPause: 'F9', next: 'F10', previous: 'F11', volumeUp: 'F5', volumeDown: 'F6', mute: 'F7' }))).ok, true);
   browser = await chromium.launchPersistentContext(chromeProfile, { channel: 'chromium', headless: false, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
   const worker = browser.serviceWorkers()[0] || await browser.waitForEvent('serviceworker');
   const extensionId = new URL(worker.url()).host;
@@ -94,6 +94,16 @@ try {
     const seek = await widget.evaluate(() => musicWidget.command('seek', 42));
     assert.equal(seek.ok, true);
     await page.waitForFunction(() => window.testActions.includes('seek:42'));
+    if (service.id !== 'vk') await page.evaluate(async url => { const audio = window.fixtureAudio = new Audio(url); await audio.play(); audio.pause(); }, audioUrl);
+    await page.evaluate(() => { window.fixtureAudio.volume = .6; });
+    await waitState(widget, s => s.capabilities.volume && Math.abs(s.volume - .6) < .001);
+    await widget.locator('#volume').evaluate(el => { el.value = 30; el.dispatchEvent(new Event('input')); el.dispatchEvent(new Event('change')); });
+    await page.waitForFunction(() => Math.abs(window.fixtureAudio.volume - .3) < .001);
+    await waitState(widget, s => Math.abs(s.volume - .3) < .001);
+    await widget.locator('#mute').click(); await page.waitForFunction(() => window.fixtureAudio.muted);
+    await waitState(widget, s => s.muted);
+    await widget.locator('#mute').click(); await page.waitForFunction(() => !window.fixtureAudio.muted);
+    await waitState(widget, s => !s.muted);
   }
   const button = widget.locator('#play-pause');
   const box = await button.boundingBox();
@@ -108,6 +118,11 @@ try {
   await pressGlobalKeys(['F9']); await waitState(widget, s => s.playing && !s.interaction);
   assert.equal(await pages.at(-1).evaluate(() => window.fixtureAudio.paused), false);
   await pressGlobalKeys(['F9']); await waitState(widget, s => !s.playing && !s.interaction);
+  await pressGlobalKeys(['F5']); await waitState(widget, s => Math.abs(s.volume - .35) < .001 && !s.interaction);
+  await pressGlobalKeys(['F6']); await waitState(widget, s => Math.abs(s.volume - .3) < .001 && !s.interaction);
+  await pressGlobalKeys(['F7']); await waitState(widget, s => s.muted && !s.interaction);
+  await pressGlobalKeys(['F7']); await waitState(widget, s => !s.muted && !s.interaction);
+  for (const page of pages.slice(0, -1)) assert.equal(await page.evaluate(() => Math.round(window.fixtureAudio.volume * 100)), 30, 'Global volume must not affect another tab');
   const backgroundCounts = await Promise.all(pages.slice(0, -1).map(page => page.evaluate(() => window.testActions.filter(action => action === 'next').length)));
   await pressGlobalKeys(['F11']); await waitState(widget, s => s.title === 'Fixture vk' && !s.interaction);
   await pressGlobalKeys(['F10']); await waitState(widget, s => s.title === 'Fixture vk next' && !s.interaction);
