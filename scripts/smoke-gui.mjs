@@ -85,10 +85,11 @@ try {
   for (const selector of ['.player', '#title', '#artist', '#play-pause', '.timeline']) assert.equal(opacities[selector], '1', selector + ' must remain opaque');
   const scaled = await evaluate('window.musicWidget.setPreferences({scale:1.5})');
   assert.equal(scaled.ok, true);
-  await pause(100);
+  await waitFor('innerWidth === 620 && innerHeight === 270');
   const metrics = await call('Page.getLayoutMetrics');
   assert.equal(metrics.cssLayoutViewport.clientWidth, 620, 'Scaling must preserve the widget layout');
   await evaluate('window.musicWidget.setPreferences({opacity:1,scale:1})');
+  await waitFor('innerWidth === 620 && innerHeight === 270');
   await evaluate('(async()=>{const s=await musicWidget.getState();update({...s,error:"Windows could not read the session",capabilities:{...s.capabilities,next:false,shuffle:false,repeat:false}})})()');
   assert.equal(await evaluate('document.querySelector("#toast")'), null, 'Errors must not create an overlay banner');
   for (const id of ['next', 'shuffle', 'repeat']) assert.equal(await evaluate(`document.getElementById("${id}").hidden`), true, 'Unavailable actions must be hidden');
@@ -100,7 +101,7 @@ try {
   const waveMask = await evaluate('document.querySelector(".edge-waves g").getAttribute("mask")');
   assert.equal(waveMask, 'url(#outside-frame)');
   const dimensions = await evaluate('({h:innerHeight,bottom:document.querySelector(".widget-footer").getBoundingClientRect().bottom})');
-  assert.ok(dimensions.bottom <= dimensions.h, 'Footer must fit in the transparent window');
+  assert.ok(dimensions.bottom <= dimensions.h, `Footer must fit in the transparent window: ${JSON.stringify(dimensions)}`);
   await mkdir(join(root, 'artifacts'), { recursive: true });
   await evaluate('window.musicWidget.command("repeat","none")');
   const transparent = await call('Page.captureScreenshot', { format: 'png' });
