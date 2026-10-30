@@ -1,6 +1,8 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, Menu, Tray, nativeImage, screen, shell, clipboard } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, Menu, Tray, nativeImage, screen, shell, clipboard, net } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
+const { AppUpdater } = require('./updater.cjs');
 const { WindowsMedia, DemoMedia, EMPTY_STATE, validateCommand } = require('./media.cjs');
 const { preferences, layoutForDisplays } = require('./window-state.cjs');
 const { watchDisplays } = require('./display-placement.cjs');
@@ -21,7 +23,7 @@ app.setPath('userData', profilePath);
 app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('io.musicadapter.widget');
 const demo = process.argv.includes('--demo');
-let window, tray, media, saveTimer, placement, browserBridge, shortcuts;
+let window, tray, media, saveTimer, placement, browserBridge, shortcuts, updater;
 let effectiveScale = 1;
 let settings = {}, interaction = true, editor = null, shortcutCommandPending = false, state = { ...EMPTY_STATE };
 
@@ -32,7 +34,7 @@ else {
 }
 
 function publish() { if (window && !window.isDestroyed()) window.webContents.send('widget:state', snapshot()); }
-function snapshot() { return { ...state, interaction, shortcuts: shortcuts?.snapshot(), shortcutEditing: editor === 'shortcuts', themeEditing: editor === 'theme', shortcutAvailable: shortcuts?.snapshot().available.toggleInteraction === true, demo, browserAvailable: browserBridge?.available === true, preferences: { ...preferences(settings), scale: effectiveScale }, platform: process.platform }; }
+function snapshot() { return { ...state, interaction, shortcuts: shortcuts?.snapshot(), shortcutEditing: editor === 'shortcuts', themeEditing: editor === 'theme', updateEditing: editor === 'updates', updates: updater?.snapshot(), shortcutAvailable: shortcuts?.snapshot().available.toggleInteraction === true, demo, browserAvailable: browserBridge?.available === true, preferences: { ...preferences(settings), scale: effectiveScale }, platform: process.platform }; }
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch (error) { console.error('Cannot save preferences', error.message); } }, 250); }
 function setInteraction(enabled) {
   if (!enabled && editor) endEditor();
@@ -62,10 +64,10 @@ async function mediaCommand(command, value) {
     await media.command(command, value); return { ok: true };
   } catch (error) { return { ok: false, error: error.message }; }
 }
-async function shortcutPlayPause() {
+async function shortcutMediaCommand(command) {
   if (shortcutCommandPending) return;
   shortcutCommandPending = true;
-  try { const result = await mediaCommand('playPause'); if (!result.ok) console.warn(result.error); }
+  try { const result = await mediaCommand(command); if (!result.ok) console.warn(result.error); }
   finally { shortcutCommandPending = false; }
 }
 function setPreferences(update) {
@@ -82,6 +84,7 @@ function menu() {
     { label: `${interaction ? 'Закрепить · пропускать клики' : 'Управлять и перемещать'} (${interactionShortcut()})`, click: () => setInteraction(!interaction) },
     { label: 'Горячие клавиши…', click: () => beginEditor('shortcuts') },
     { label: 'Цвет интерфейса…', click: () => beginEditor('theme') },
+    { label: 'Обновления Liberty Wave…', click: () => beginEditor('updates') },
     { label: 'Источник', submenu: [{ label: 'Автоматически', type: 'radio', checked: !state.selection || state.selection === 'auto', click: () => selectSource('auto') }, { type: 'separator' }, ...(state.sources || []).map(s => ({ label: sourceLabel(s) + (s.kind === 'browser' && s.title ? ' — ' + s.title.slice(0, 40) : ''), type: 'radio', checked: state.selection === s.id, click: () => selectSource(s.id) }))] },
     { label: 'Подключить браузер', enabled: browserBridge?.available === true, click: showPairing },
     { label: 'Отключить все браузеры', enabled: (browserBridge?.clients.size || 0) > 0, click: () => { browserBridge.revoke(); updateTray(); } },
@@ -112,8 +115,21 @@ function trayImage() {
 async function start() {
   try { const saved = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'widget.json'), 'utf8')); if (saved && typeof saved === 'object') settings = saved; } catch {}
   Object.assign(settings, preferences(settings));
-  shortcuts = new ShortcutManager(globalShortcut, { toggleInteraction: () => setInteraction(!interaction), playPause: shortcutPlayPause }, settings.shortcuts);
+  shortcuts = new ShortcutManager(globalShortcut, { toggleInteraction: () => setInteraction(!interaction), ...Object.fromEntries(['playPause', 'next', 'previous'].map(command => [command, () => shortcutMediaCommand(command)])) }, settings.shortcuts);
   settings.shortcuts = { ...shortcuts.bindings };
+  const portableFile = process.env.PORTABLE_EXECUTABLE_FILE;
+  const canInstall = process.platform === 'win32' && app.isPackaged && typeof portableFile === 'string' && path.isAbsolute(portableFile) && portableFile.toLowerCase().endsWith('.exe');
+  const updateDirectory = path.join(app.getPath('userData'), 'updates');
+  updater = new AppUpdater({ currentVersion: app.getVersion(), directory: updateDirectory, supported: canInstall, fetch: (...args) => net.fetch(...args), launchInstaller: async update => {
+    if (!canInstall || !fs.statSync(portableFile).isFile()) throw new Error('Не найден исходный переносимый .exe');
+    const helper = path.join(updateDirectory, 'install-update.ps1');
+    const source = app.isPackaged ? path.join(process.resourcesPath, 'native/install-update.ps1') : path.join(__dirname, '../native/install-update.ps1');
+    fs.copyFileSync(source, helper);
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', helper, '-TargetPath', portableFile, '-UpdatePath', update.filename, '-ExpectedSha256', update.sha256, '-WaitPid', String(process.pid), '-StatusPath', path.join(updateDirectory, 'last-install.json')], { detached: true, windowsHide: true, stdio: 'ignore' });
+    await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
+    child.unref(); setTimeout(() => app.quit(), 250);
+  } });
+  updater.on('state', publish);
   const initial = layoutForDisplays(settings.bounds, screen.getAllDisplays(), settings.scale);
   effectiveScale = initial.scale;
   window = new BrowserWindow({ ...initial.bounds, title: APP_NAME, icon: nativeImage.createFromPath(ICON_PATH), transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
@@ -130,6 +146,14 @@ async function start() {
   window.webContents.on('render-process-gone', endEditor);
   const authorized = event => event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame;
   ipcMain.handle('widget:get-state', event => authorized(event) ? snapshot() : null);
+  ipcMain.handle('widget:updates-open', event => authorized(event) && interaction ? beginEditor('updates') : { ok: false });
+  ipcMain.handle('widget:updates-close', event => { if (authorized(event) && editor === 'updates') endEditor(); return { ok: true }; });
+  ipcMain.handle('widget:updates-action', (event, action) => {
+    if (!authorized(event) || !interaction || editor !== 'updates') return { ok: false, error: 'Откройте меню обновлений' };
+    if (!['check', 'download', 'install', 'cancel'].includes(action)) return { ok: false, error: 'Неизвестное действие обновления' };
+    if (action === 'cancel') { updater.cancel(); return { ok: true }; }
+    return updater[action]();
+  });
   ipcMain.handle('widget:shortcuts-open', event => authorized(event) && interaction ? beginEditor('shortcuts') : { ok: false });
   ipcMain.handle('widget:shortcuts-cancel', event => { if (authorized(event) && editor === 'shortcuts') endEditor(); return { ok: true }; });
   ipcMain.handle('widget:theme-open', event => authorized(event) && interaction ? beginEditor('theme') : { ok: false });
@@ -179,5 +203,5 @@ async function start() {
   media.start();
   updateTray();
 }
-app.on('before-quit', () => { editor = null; placement?.dispose(); clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings.bounds = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } media?.stop(); browserBridge?.stop(); shortcuts?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
+app.on('before-quit', () => { editor = null; updater?.stop(); placement?.dispose(); clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings.bounds = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } media?.stop(); browserBridge?.stop(); shortcuts?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
 app.on('window-all-closed', () => app.quit());

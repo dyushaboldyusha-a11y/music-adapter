@@ -30,7 +30,7 @@ try {
   await waitState(widget, state => state.interaction === true);
   await widget.evaluate(() => musicWidget.openShortcuts());
   await waitState(widget, state => state.shortcutEditing);
-  assert.equal((await widget.evaluate(() => musicWidget.saveShortcuts({ toggleInteraction: 'F8', playPause: 'F9' }))).ok, true);
+  assert.equal((await widget.evaluate(() => musicWidget.saveShortcuts({ toggleInteraction: 'F8', playPause: 'F9', next: 'F10', previous: 'F11' }))).ok, true);
   browser = await chromium.launchPersistentContext(chromeProfile, { channel: 'chromium', headless: false, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
   const worker = browser.serviceWorkers()[0] || await browser.waitForEvent('serviceworker');
   const extensionId = new URL(worker.url()).host;
@@ -108,6 +108,10 @@ try {
   await pressGlobalKeys(['F9']); await waitState(widget, s => s.playing && !s.interaction);
   assert.equal(await pages.at(-1).evaluate(() => window.fixtureAudio.paused), false);
   await pressGlobalKeys(['F9']); await waitState(widget, s => !s.playing && !s.interaction);
+  const backgroundCounts = await Promise.all(pages.slice(0, -1).map(page => page.evaluate(() => window.testActions.filter(action => action === 'next').length)));
+  await pressGlobalKeys(['F11']); await waitState(widget, s => s.title === 'Fixture vk' && !s.interaction);
+  await pressGlobalKeys(['F10']); await waitState(widget, s => s.title === 'Fixture vk next' && !s.interaction);
+  assert.deepEqual(await Promise.all(pages.slice(0, -1).map(page => page.evaluate(() => window.testActions.filter(action => action === 'next').length))), backgroundCounts);
   await pressGlobalKeys(['F8']); await waitState(widget, s => s.interaction);
   await pages.at(-1).close();
   await waitState(widget, s => !s.connected);

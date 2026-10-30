@@ -14,7 +14,7 @@
       }
       $('shortcut-save').disabled = busy || !!recording;
       $('shortcut-defaults').disabled = busy;
-      $('shortcut-clear-playPause').disabled = busy;
+      for (const action of Object.keys(api.ACTIONS).filter(action => action !== 'toggleInteraction')) $(`shortcut-clear-${action}`).disabled = busy;
     }
     function update(state) {
       if (state.shortcutEditing && panel.hidden) {
@@ -30,7 +30,7 @@
     for (const action of Object.keys(api.ACTIONS)) $(`bind-${action}`).addEventListener('click', () => {
       recording = action; message('Нажмите клавишу или сочетание. Esc — отменить запись'); render();
     });
-    $('shortcut-clear-playPause').addEventListener('click', () => { recording = null; draft.playPause = ''; message('Бинд паузы отключён. Сохраните изменения'); render(); });
+    for (const action of Object.keys(api.ACTIONS).filter(action => action !== 'toggleInteraction')) $(`shortcut-clear-${action}`).addEventListener('click', () => { recording = null; draft[action] = ''; message('Бинд отключён. Сохраните изменения'); render(); });
     $('shortcut-defaults').addEventListener('click', () => { recording = null; draft = { ...api.DEFAULT_BINDINGS }; message('Сочетания по умолчанию. Сохраните изменения'); render(); });
     $('shortcut-cancel').addEventListener('click', () => bridge.cancelShortcuts());
     $('shortcut-save').addEventListener('click', async () => {

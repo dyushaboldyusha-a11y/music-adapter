@@ -1,6 +1,6 @@
 (function (root) {
-  const DEFAULT_BINDINGS = Object.freeze({ toggleInteraction: 'Control+Shift+8', playPause: 'Control+Shift+Space' });
-  const ACTIONS = Object.freeze({ toggleInteraction: 'Управление виджетом', playPause: 'Пауза / продолжить' });
+  const DEFAULT_BINDINGS = Object.freeze({ toggleInteraction: 'Control+Shift+8', playPause: 'Control+Shift+Space', next: '', previous: '' });
+  const ACTIONS = Object.freeze({ toggleInteraction: 'Управление виджетом', playPause: 'Пауза / продолжить', next: 'Следующий трек', previous: 'Предыдущий трек' });
   const modifiers = new Map([['control', 'Control'], ['ctrl', 'Control'], ['alt', 'Alt'], ['shift', 'Shift'], ['super', 'Super'], ['meta', 'Super'], ['win', 'Super']]);
   const namedKeys = ['Space', 'Tab', 'Enter', 'Escape', 'Backspace', 'Delete', 'Insert', 'Home', 'End', 'PageUp', 'PageDown', 'Up', 'Down', 'Left', 'Right', 'Plus', 'MediaPlayPause', 'MediaStop', 'MediaNextTrack', 'MediaPreviousTrack', 'VolumeUp', 'VolumeDown', 'VolumeMute', 'numdec', 'numadd', 'numsub', 'nummult', 'numdiv'];
   const names = new Map(namedKeys.map(key => [key.toLowerCase(), key]));
@@ -24,10 +24,12 @@
     return result;
   }
   function normalizeBindings(input) {
-    if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length !== 2 || Object.keys(input).some(key => !Object.hasOwn(ACTIONS, key))) throw new Error('Некорректные настройки горячих клавиш');
-    const bindings = Object.fromEntries(Object.keys(ACTIONS).map(key => [key, normalizeAccelerator(input[key])]));
+    if (!input || typeof input !== 'object' || Array.isArray(input) || !Object.hasOwn(input, 'toggleInteraction') || !Object.hasOwn(input, 'playPause') || Object.keys(input).some(key => !Object.hasOwn(ACTIONS, key))) throw new Error('Некорректные настройки горячих клавиш');
+    // Existing 0.4.0 profiles have only control and playback bindings.
+    const bindings = Object.fromEntries(Object.keys(ACTIONS).map(key => [key, normalizeAccelerator(Object.hasOwn(input, key) ? input[key] : DEFAULT_BINDINGS[key])]));
     if (!bindings.toggleInteraction) throw new Error('Назначьте клавишу управления виджетом');
-    if (bindings.toggleInteraction === bindings.playPause) throw new Error('Для двух действий нужны разные сочетания');
+    const assigned = Object.values(bindings).filter(Boolean);
+    if (new Set(assigned).size !== assigned.length) throw new Error('Для разных действий нужны разные сочетания');
     return bindings;
   }
   function readBindings(input) { try { return normalizeBindings({ ...DEFAULT_BINDINGS, ...input }); } catch { return { ...DEFAULT_BINDINGS }; } }

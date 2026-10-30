@@ -74,8 +74,18 @@
       <p class="settings-description">Работают во всех приложениях, в том числе при закреплённом виджете.</p>
       <div class="shortcut-row"><span id="bind-toggle-label">Управление / закрепление</span><button class="shortcut-key" id="bind-toggleInteraction" aria-labelledby="bind-toggle-label" aria-pressed="false"></button><span></span></div>
       <div class="shortcut-row"><span id="bind-play-label">Пауза / продолжить</span><button class="shortcut-key" id="bind-playPause" aria-labelledby="bind-play-label" aria-pressed="false"></button><button class="shortcut-clear" id="shortcut-clear-playPause" aria-label="Отключить бинд паузы" title="Отключить">×</button></div>
+      <div class="shortcut-row"><span id="bind-next-label">Следующий трек</span><button class="shortcut-key" id="bind-next" aria-labelledby="bind-next-label" aria-pressed="false"></button><button class="shortcut-clear" id="shortcut-clear-next" aria-label="Отключить бинд следующего трека" title="Отключить">×</button></div>
+      <div class="shortcut-row"><span id="bind-previous-label">Предыдущий трек</span><button class="shortcut-key" id="bind-previous" aria-labelledby="bind-previous-label" aria-pressed="false"></button><button class="shortcut-clear" id="shortcut-clear-previous" aria-label="Отключить бинд предыдущего трека" title="Отключить">×</button></div>
       <p class="settings-status" id="shortcut-status" role="status" aria-live="polite"></p>
       <div class="settings-actions"><button id="shortcut-defaults">По умолчанию</button><button id="shortcut-cancel">Отмена</button><button id="shortcut-save" class="primary-action">Сохранить</button></div>
+    </section>
+    <section id="updates" class="settings-panel updates-panel" role="dialog" aria-modal="true" aria-labelledby="updates-title" hidden>
+      <h2 id="updates-title">Обновления Liberty Wave</h2>
+      <p class="settings-description" id="installed-version"></p>
+      <p id="update-status" role="status" aria-live="polite"></p>
+      <progress id="update-progress" max="1" value="0" aria-label="Скачивание обновления" hidden></progress>
+      <p class="settings-description" id="update-detail"></p>
+      <div class="settings-actions"><button id="update-close">Закрыть</button><button id="update-cancel-download" hidden>Отменить загрузку</button><button id="update-check" class="primary-action">Проверить</button><button id="update-download" class="primary-action" hidden>Скачать</button><button id="update-install" class="primary-action" hidden>Установить и перезапустить</button></div>
     </section>
     <section id="theme" class="settings-panel theme-panel" role="dialog" aria-modal="true" aria-labelledby="theme-title" hidden>
       <h2 id="theme-title">Цвет интерфейса</h2>
@@ -104,6 +114,7 @@
   <script src="../shared/theme.js"></script>
   <script src="shortcut-settings.js"></script>
   <script src="theme-settings.js"></script>
+  <script src="update-settings.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

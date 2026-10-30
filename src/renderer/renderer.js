@@ -4,6 +4,7 @@ const playbackClock = new LibertyPlaybackClock();
 const bridge = window.musicWidget;
 const shortcutSettings = LibertyShortcutSettings.create(bridge);
 const themeSettings = LibertyThemeSettings.create(bridge);
+const updateSettings = LibertyUpdateSettings.create(bridge);
 const formatTime = value => { const total = Math.floor(Math.max(0, value || 0)); return total >= 3600 ? `${Math.floor(total / 3600)}:${String(Math.floor(total / 60) % 60).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}` : `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; };
 async function command(name, value) { if (!state.interaction) return { ok: false }; const result = await bridge.command(name, value); if (!result.ok) console.warn(result.error || 'Не удалось выполнить команду'); return result; }
 function sourceLabel(source) { return `${source.name} · ${source.kind === 'app' ? 'приложение' : source.provider === 'browser' ? 'браузер' : source.browser || 'браузер'}`; }
@@ -68,7 +69,8 @@ function update(next) {
   $('interaction-key').title = state.interaction ? (controlKey ? LibertyShortcuts.format(controlKey) : 'Настройте горячие клавиши через значок в трее') : '';
   shortcutSettings.update(state);
   themeSettings.update(state);
-  const modalOpen = shortcutSettings.isOpen() || themeSettings.isOpen();
+  updateSettings.update(state);
+  const modalOpen = shortcutSettings.isOpen() || themeSettings.isOpen() || updateSettings.isOpen();
   document.querySelector('.player').inert = modalOpen;
   document.querySelector('.artwork-column').inert = modalOpen;
   document.querySelector('.widget-footer').inert = !state.interaction || modalOpen;
@@ -99,7 +101,7 @@ bridge.onPairing(showPairing);
 $('artwork').addEventListener('error', () => { currentArtwork = null; $('artwork').hidden = true; $('cover-placeholder').hidden = false; });
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && state.interaction) { if (!$('pairing').hidden) $('pairing').hidden = true; else bridge.toggleInteraction(); } });
 document.addEventListener('wheel', event => {
-  if (!event.ctrlKey || !state.interaction || shortcutSettings.isOpen() || themeSettings.isOpen()) return;
+  if (!event.ctrlKey || !state.interaction || shortcutSettings.isOpen() || themeSettings.isOpen() || updateSettings.isOpen()) return;
   event.preventDefault();
   clearTimeout(scaleTimer);
   const scale = Math.max(.5, Math.min(1.75, (state.preferences?.scale || 1) + (event.deltaY < 0 ? .05 : -.05)));

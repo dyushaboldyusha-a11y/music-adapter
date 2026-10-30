@@ -99,6 +99,13 @@ body.locked :focus-visible { outline: none; }
 .settings-panel h2 { margin: 0 0 4px; font-size: 16px; font-weight: 500; line-height: 22px; }
 .settings-description { margin: 0 0 6px; font-size: 10px; line-height: 14px; color: hsl(var(--theme-hue) calc(var(--theme-saturation) * 27.95%) 68.43% / 1.000); }
 .shortcut-row { display: grid; grid-template-columns: 1fr 205px 22px; gap: 9px; align-items: center; height: 34px; font-size: 12px; }
+.shortcuts-panel { padding-top: 10px; padding-bottom: 10px; }
+.shortcuts-panel h2 { font-size: 15px; line-height: 20px; margin-bottom: 2px; }
+.shortcuts-panel .settings-description { line-height: 12px; margin-bottom: 4px; }
+.shortcuts-panel .shortcut-row { height: 25px; }
+.shortcuts-panel .settings-status { min-height: 12px; line-height: 12px; margin: 3px 0; }
+.shortcuts-panel .shortcut-key { padding: 3px 10px; line-height: 16px; }
+.shortcuts-panel .settings-actions button { padding: 4px 10px; line-height: 14px; }
 .settings-panel button { padding: 5px 10px; border: 1px solid hsl(var(--theme-hue) calc(var(--theme-saturation) * 57.41%) 42.35% / 1.000); border-radius: 6px; background: hsl(var(--theme-hue) calc(var(--theme-saturation) * 55.84%) 15.10% / 1.000); color: hsl(var(--theme-hue) calc(var(--theme-saturation) * 68.12%) 86.47% / 1.000); font-size: 11px; cursor: pointer; }
 .settings-panel .shortcut-key { text-overflow: ellipsis; white-space: nowrap; overflow: hidden; background: hsl(var(--theme-hue) calc(var(--theme-saturation) * 45.10%) 10.00% / 1.000); text-align: center; }
 .settings-panel .shortcut-key.recording { border-color: var(--red); box-shadow: 0 0 8px hsl(var(--theme-hue) calc(var(--theme-saturation) * 100.00%) 59.41% / 0.400); }
@@ -126,3 +133,7 @@ body:not(.locked) .settings-panel .theme-presets button:hover { background: var(
 .theme-controls .settings-status { margin: 6px 0; }
 .theme-controls .settings-actions { gap: 6px; }
 .theme-controls .settings-actions button { padding: 5px 8px; }
+#update-status { min-height: 48px; margin: 12px 0 8px; font-size: 12px; line-height: 17px; }
+#update-status.error { color: hsl(var(--theme-hue) 100% 80%); }
+#update-progress { width: 100%; height: 5px; margin: 0 0 8px; accent-color: var(--red); }
+.updates-panel .settings-actions { margin-top: 12px; }

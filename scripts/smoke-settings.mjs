@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { pressGlobalKeys } from './send-global-keys.mjs';
 const require = createRequire(import.meta.url), root = resolve(import.meta.dirname, '..');
 const profile = await mkdtemp(join(tmpdir(), 'liberty-settings-'));
@@ -53,6 +54,12 @@ try {
   await page.evaluate(() => musicWidget.openShortcuts()); await page.locator('#shortcuts').waitFor({ state: 'visible' });
   await page.locator('#bind-playPause').click(); await page.keyboard.press('Escape');
   assert.equal(await page.locator('#bind-playPause').textContent(), 'F9');
+  await page.locator('#bind-next').click(); await page.keyboard.press('F10');
+  await page.locator('#bind-previous').click(); await page.keyboard.press('F11');
+  await page.locator('#shortcut-save').click(); await page.locator('#shortcuts').waitFor({ state: 'hidden' });
+  await page.evaluate(() => musicWidget.openShortcuts()); await page.locator('#shortcuts').waitFor({ state: 'visible' });
+  const fits = await page.locator('#shortcut-save').evaluate(el => el.getBoundingClientRect().bottom <= el.closest('section').getBoundingClientRect().bottom);
+  assert.equal(fits, true, 'All four bindings and Save must fit in the widget');
   await mkdir(join(root, 'artifacts'), { recursive: true });
   await page.screenshot({ path: join(root, 'artifacts/widget-hotkeys.png') });
   await page.locator('#shortcut-cancel').click(); await page.locator('#shortcuts').waitFor({ state: 'hidden' });
@@ -84,18 +91,40 @@ try {
   await page.screenshot({ path: join(root, 'artifacts/widget-green.png') });
   assert.ok(bounds.height === 202);
 
+  const updateBytes = Buffer.alloc(256); updateBytes.write('MZ'); updateBytes.writeUInt32LE(128, 60); updateBytes.set([80, 69, 0, 0], 128);
+  const updateHash = createHash('sha256').update(updateBytes).digest('hex');
+  await app.evaluate(({ protocol }, fixture) => {
+    const base = 'https://github.com/dyushaboldyusha-a11y/music-adapter/releases/download/v0.4.2/';
+    const name = 'Liberty-Wave-0.4.2-Windows.exe';
+    protocol.handle('https', request => {
+      if (request.url.includes('/releases/latest')) return new Response(JSON.stringify({ tag_name: 'v0.4.2', assets: [name, 'SHA256SUMS.txt'].map(name => ({ name, state: 'uploaded', size: name.endsWith('.exe') ? fixture.bytes.length : 128, browser_download_url: base + name })) }));
+      if (request.url.endsWith('SHA256SUMS.txt')) return new Response(fixture.hash + '  ' + name + '\n');
+      if (request.url === base + name) return new Response(new Uint8Array(fixture.bytes));
+      return new Response('not found', { status: 404 });
+    });
+  }, { bytes: [...updateBytes], hash: updateHash });
+  await page.evaluate(() => musicWidget.openUpdates()); await page.locator('#updates').waitFor({ state: 'visible' });
+  await page.locator('#update-check').click(); await waitState(page, s => s.updates.phase === 'available');
+  await page.locator('#update-download').click(); await waitState(page, s => s.updates.phase === 'ready');
+  assert.equal(await page.locator('#update-install').isDisabled(), true, 'A development run must not replace an installed executable');
+  await page.screenshot({ path: join(root, 'artifacts/widget-updates.png') });
+  await page.locator('#update-close').click(); await page.locator('#updates').waitFor({ state: 'hidden' });
+
   browser = await chromium.launch({ channel: 'chromium', headless: false });
   const other = await browser.newPage(); await other.setContent('<h1>Another application has keyboard focus</h1>'); await other.bringToFront();
   await pressGlobalKeys(['F8']); await waitState(page, s => !s.interaction);
   const playing = (await page.evaluate(() => musicWidget.getState())).playing;
   await pressGlobalKeys(['F9']); await waitState(page, s => s.playing !== playing && !s.interaction);
   await pressGlobalKeys(['F9']); await waitState(page, s => s.playing === playing && !s.interaction);
+  const title = (await page.evaluate(() => musicWidget.getState())).title;
+  await pressGlobalKeys(['F10']); await waitState(page, s => s.title !== title && !s.interaction);
+  await pressGlobalKeys(['F11']); await waitState(page, s => s.title === title && !s.interaction);
   assert.equal((await page.evaluate(() => musicWidget.command('next'))).ok, false, 'Pinned mouse/IPC controls must remain blocked');
   await pressGlobalKeys(['F8']); await waitState(page, s => s.interaction);
   await browser.close(); browser = null;
   await app.close(); app = null;
   const saved = JSON.parse(await readFile(join(profile, 'widget.json'), 'utf8'));
-  assert.equal(saved.color, '#22c55e'); assert.deepEqual(saved.shortcuts, { toggleInteraction: 'F8', playPause: 'F9' });
+  assert.equal(saved.color, '#22c55e'); assert.deepEqual(saved.shortcuts, { toggleInteraction: 'F8', playPause: 'F9', next: 'F10', previous: 'F11' });
   page = await launch();
   const restored = await page.evaluate(() => musicWidget.getState());
   assert.deepEqual(restored.shortcuts.bindings, saved.shortcuts); assert.equal(restored.preferences.color, '#22c55e');
@@ -103,12 +132,13 @@ try {
   if (process.platform === 'linux') {
     await app.close(); app = null;
     const previousProfile = join(legacyConfig, 'music-adapter');
-    await mkdir(previousProfile); await writeFile(join(previousProfile, 'widget.json'), JSON.stringify(saved));
+    const previousSettings = { ...saved, shortcuts: { toggleInteraction: 'F8', playPause: 'F9' } };
+    await mkdir(previousProfile); await writeFile(join(previousProfile, 'widget.json'), JSON.stringify(previousSettings));
     app = await _electron.launch({ executablePath: require('electron'), args: [root, '--demo', '--disable-gpu'], env: { ...process.env, XDG_CONFIG_HOME: legacyConfig } });
     page = await app.firstWindow(); await page.waitForFunction(() => !!window.musicWidget);
     const legacy = await waitState(page, state => state.connected);
     assert.equal(await app.evaluate(({ app }) => app.getPath('userData')), previousProfile);
-    assert.deepEqual(legacy.shortcuts.bindings, saved.shortcuts); assert.equal(legacy.preferences.color, saved.color);
+    assert.deepEqual(legacy.shortcuts.bindings, { ...previousSettings.shortcuts, next: '', previous: '' }); assert.equal(legacy.preferences.color, saved.color);
   }
   console.log('PASS: editable shortcuts, busy-key rollback, global keys with another app focused, palette, restart persistence, Liberty Wave identity and preservation of the previous profile.');
 } finally {
