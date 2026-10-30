@@ -8,16 +8,22 @@
     [ValidateRange(1,60)][int]$LockWaitSeconds = 30
 )
 $ErrorActionPreference = 'Stop'
+function Get-UpdateSha256([string]$FilePath) {
+    $stream = [IO.File]::OpenRead($FilePath)
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace('-', '').ToLowerInvariant() }
+    finally { $algorithm.Dispose(); $stream.Dispose() }
+}
 $token = [Guid]::NewGuid().ToString('N')
 $pending = $TargetPath + '.' + $token + '.pending.exe'
 $backup = $TargetPath + '.' + $token + '.backup.exe'
 $replaced = $false
 try {
     if (-not [IO.Path]::IsPathRooted($TargetPath) -or -not [IO.Path]::IsPathRooted($UpdatePath) -or $TargetPath -eq $UpdatePath) { throw 'Invalid update paths.' }
-    if ((Get-FileHash -LiteralPath $UpdatePath -Algorithm SHA256).Hash -ne $ExpectedSha256) { throw 'Update checksum mismatch.' }
+    if ((Get-UpdateSha256 $UpdatePath) -ne $ExpectedSha256) { throw 'Update checksum mismatch.' }
     # Stage on the same volume as the original file, before changing it.
     Copy-Item -LiteralPath $UpdatePath -Destination $pending
-    if ((Get-FileHash -LiteralPath $pending -Algorithm SHA256).Hash -ne $ExpectedSha256) { throw 'Staged checksum mismatch.' }
+    if ((Get-UpdateSha256 $pending) -ne $ExpectedSha256) { throw 'Staged checksum mismatch.' }
     if ($WaitPid -gt 0) { Wait-Process -Id $WaitPid -Timeout 30 -ErrorAction SilentlyContinue }
     $deadline = [DateTime]::UtcNow.AddSeconds($LockWaitSeconds)
     while ($true) {

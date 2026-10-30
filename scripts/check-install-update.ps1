@@ -11,13 +11,13 @@ $status = Join-Path $directory 'result.json'
 try {
     [IO.File]::WriteAllText($target, 'old app')
     [IO.File]::WriteAllText($update, 'new app')
-    $hash = (Get-FileHash $update -Algorithm SHA256).Hash
+    $hash = '3e251d279782d6b3aff8badc87bbb7c56ab11550d8441c03ae951d1c9d759274'
     & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetPath $target -UpdatePath $update -ExpectedSha256 $hash -WaitPid 0 -StatusPath $status -NoRelaunch
     if ($LASTEXITCODE -ne 0 -or [IO.File]::ReadAllText($target) -ne 'new app' -or (Test-Path $update)) { throw 'Verified update did not replace the same executable.' }
     [IO.File]::WriteAllText($update, 'bad file')
     & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetPath $target -UpdatePath $update -ExpectedSha256 $hash -WaitPid 0 -StatusPath $status -NoRelaunch
     if ($LASTEXITCODE -eq 0 -or [IO.File]::ReadAllText($target) -ne 'new app') { throw 'A checksum failure changed the existing application.' }
-    $hash = (Get-FileHash $update -Algorithm SHA256).Hash
+    $hash = 'd334e59d33841cf4c2f136649e6e0e41e80c67aa2c078ff18d128f34a40e8316'
     $lock = [IO.File]::Open($target, 'Open', 'Read', 'None')
     try {
         & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetPath $target -UpdatePath $update -ExpectedSha256 $hash -WaitPid 0 -StatusPath $status -NoRelaunch -LockWaitSeconds 1
