@@ -64,6 +64,7 @@ jobs:
           sudo chown root:root node_modules/electron/dist/chrome-sandbox
           sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
       - run: npm run test:gui
+      - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:settings
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:browser
   release:
     if: github.event_name == 'workflow_dispatch' && inputs.publish_release

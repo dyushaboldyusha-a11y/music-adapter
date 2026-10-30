@@ -39,8 +39,8 @@ test('keeps a saved widget reachable when a display is unplugged or has negative
   assert.equal(clampBounds({ x: NaN, y: Infinity }, [primary]).x, 1276);
 });
 test('limits decoration opacity to 25–100 percent and scales the entire widget', () => {
-  assert.deepEqual(preferences({ opacity: .01, scale: 9 }), { opacity: .25, scale: 1.75 });
-  assert.deepEqual(preferences({ opacity: NaN, scale: Infinity }), { opacity: 1, scale: 1 });
+  assert.deepEqual(preferences({ opacity: .01, scale: 9 }), { opacity: .25, scale: 1.75, color: '#ff3045' });
+  assert.deepEqual(preferences({ opacity: NaN, scale: Infinity }), { opacity: 1, scale: 1, color: '#ff3045' });
   const display = { workArea: { x: 0, y: 0, width: 1920, height: 1080 } };
   const large = clampBounds({ x: 1700, y: 1000 }, [display], 1.5);
   assert.deepEqual(large, { width: 930, height: 405, x: 990, y: 675 });

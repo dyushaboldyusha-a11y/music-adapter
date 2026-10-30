@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
+import { pressGlobalKeys } from './send-global-keys.mjs';
 const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, '..');
 const { services } = require('../browser-extension/services.js');
@@ -27,6 +28,9 @@ try {
   await waitState(widget, state => state.browserAvailable === true);
   if (!(await widget.evaluate(() => musicWidget.getState())).interaction) await widget.evaluate(() => musicWidget.toggleInteraction());
   await waitState(widget, state => state.interaction === true);
+  await widget.evaluate(() => musicWidget.openShortcuts());
+  await waitState(widget, state => state.shortcutEditing);
+  assert.equal((await widget.evaluate(() => musicWidget.saveShortcuts({ toggleInteraction: 'F8', playPause: 'F9' }))).ok, true);
   browser = await chromium.launchPersistentContext(chromeProfile, { channel: 'chromium', headless: false, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
   const worker = browser.serviceWorkers()[0] || await browser.waitForEvent('serviceworker');
   const extensionId = new URL(worker.url()).host;
@@ -100,12 +104,16 @@ try {
   const visual = await button.evaluate(el => ({ transform: getComputedStyle(el).transform, pointerEvents: getComputedStyle(el).pointerEvents, inert: el.closest('main').inert }));
   assert.equal(visual.transform, 'none'); assert.equal(visual.pointerEvents, 'none'); assert.equal(visual.inert, true);
   assert.equal((await widget.evaluate(() => musicWidget.selectSource('auto'))).ok, false);
-  await widget.evaluate(() => musicWidget.toggleInteraction());
+  await pages.at(-1).bringToFront();
+  await pressGlobalKeys(['F9']); await waitState(widget, s => s.playing && !s.interaction);
+  assert.equal(await pages.at(-1).evaluate(() => window.fixtureAudio.paused), false);
+  await pressGlobalKeys(['F9']); await waitState(widget, s => !s.playing && !s.interaction);
+  await pressGlobalKeys(['F8']); await waitState(widget, s => s.interaction);
   await pages.at(-1).close();
   await waitState(widget, s => !s.connected);
   await widget.evaluate(() => musicWidget.selectSource('auto'));
   await waitState(widget, s => s.connected);
-  console.log('PASS: Chromium MV3 ↔ Electron, five service fixtures, stable playback time, paused clock, detached VK Audio, cover transport, VK next/seek, exact routing and pinned controls.');
+  console.log('PASS: Chromium MV3 ↔ Electron, five service fixtures, stable playback time, paused clock, detached VK Audio, cover transport, VK next/seek, exact routing, global playback hotkeys with VK tab focused and pinned mouse controls.');
 } finally {
   await browser?.close(); await app?.close();
   await rm(appProfile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); await rm(chromeProfile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

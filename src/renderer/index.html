@@ -68,14 +68,41 @@
       <strong id="pair-code"></strong><p class="pair-expiry">Код действует 5 минут</p>
       <div><button id="copy-code">Скопировать код</button><button id="close-pair">Закрыть</button></div>
     </section>
+    <section id="shortcuts" class="settings-panel shortcuts-panel" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" hidden>
+      <h2 id="shortcuts-title">Горячие клавиши</h2>
+      <p class="settings-description">Работают во всех приложениях, в том числе при закреплённом виджете.</p>
+      <div class="shortcut-row"><span id="bind-toggle-label">Управление / закрепление</span><button class="shortcut-key" id="bind-toggleInteraction" aria-labelledby="bind-toggle-label" aria-pressed="false"></button><span></span></div>
+      <div class="shortcut-row"><span id="bind-play-label">Пауза / продолжить</span><button class="shortcut-key" id="bind-playPause" aria-labelledby="bind-play-label" aria-pressed="false"></button><button class="shortcut-clear" id="shortcut-clear-playPause" aria-label="Отключить бинд паузы" title="Отключить">×</button></div>
+      <p class="settings-status" id="shortcut-status" role="status" aria-live="polite"></p>
+      <div class="settings-actions"><button id="shortcut-defaults">По умолчанию</button><button id="shortcut-cancel">Отмена</button><button id="shortcut-save" class="primary-action">Сохранить</button></div>
+    </section>
+    <section id="theme" class="settings-panel theme-panel" role="dialog" aria-modal="true" aria-labelledby="theme-title" hidden>
+      <h2 id="theme-title">Цвет интерфейса</h2>
+      <div class="theme-body">
+        <div id="color-wheel" class="color-wheel" role="slider" tabindex="0" aria-label="Цветовой круг: влево и вправо — оттенок, вверх и вниз — насыщенность" aria-valuemin="0" aria-valuemax="359" aria-valuenow="354"><span id="wheel-marker" class="wheel-marker"></span></div>
+        <div class="theme-controls">
+          <div class="theme-values"><label for="theme-hex">HEX <input id="theme-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Цвет HEX"></label><label for="theme-brightness">Яркость <output id="theme-brightness-value">100%</output></label></div>
+          <input type="range" id="theme-brightness" min="0" max="100" step="1" value="100" aria-label="Яркость цвета">
+          <div class="theme-presets" aria-label="Готовые цвета">
+            <button data-color="#ff3045" style="--swatch:#ff3045" aria-label="Красный"></button><button data-color="#ff9f30" style="--swatch:#ff9f30" aria-label="Оранжевый"></button><button data-color="#22c55e" style="--swatch:#22c55e" aria-label="Зелёный"></button><button data-color="#22d3ee" style="--swatch:#22d3ee" aria-label="Голубой"></button><button data-color="#438bff" style="--swatch:#438bff" aria-label="Синий"></button><button data-color="#a855f7" style="--swatch:#a855f7" aria-label="Фиолетовый"></button><button data-color="#ec4899" style="--swatch:#ec4899" aria-label="Розовый"></button><button data-color="#d4d4d8" style="--swatch:#d4d4d8" aria-label="Серый"></button>
+          </div>
+          <p class="settings-status" id="theme-status" role="status" aria-live="polite"></p>
+          <div class="settings-actions"><button id="theme-default">Сбросить</button><button id="theme-cancel">Отмена</button><button id="theme-save" class="primary-action">Сохранить</button></div>
+        </div>
+      </div>
+    </section>
   </main>
   <footer class="widget-footer">
     <label class="source-picker"><span class="source-dot" aria-hidden="true"></span><select id="source" aria-label="Источник музыки"><option value="auto">Автоматически</option></select></label>
     <button id="pair-browser" class="pair-button" aria-label="Подключить браузер" title="Подключить браузер">＋</button>
     <span class="demo-label" id="demo-label" hidden>ДЕМО</span>
-    <span class="mode-hint" id="mode-hint"><svg><use href="#i-move"/></svg><span id="mode-text">Перетащите за обложку или название</span><kbd>Num 8</kbd><span id="key-hint">закрепить</span></span>
+    <span class="mode-hint" id="mode-hint"><svg><use href="#i-move"/></svg><span id="mode-text">Перетащите за обложку или название</span><kbd id="interaction-key">Ctrl+Shift+8</kbd><span id="key-hint">закрепить</span></span>
   </footer>
   <script src="playback-clock.js"></script>
+  <script src="../shared/shortcuts.js"></script>
+  <script src="../shared/theme.js"></script>
+  <script src="shortcut-settings.js"></script>
+  <script src="theme-settings.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

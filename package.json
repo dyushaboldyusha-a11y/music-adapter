@@ -1,6 +1,6 @@
 {
   "name": "music-adapter",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Liberty — музыкальный виджет для приложений и браузеров",
   "author": "music-adapter",
   "license": "MIT",
@@ -11,6 +11,7 @@
     "demo": "electron . --demo",
     "test": "node --test --test-isolation=none test/*.test.cjs",
     "test:gui": "node scripts/smoke-gui.mjs",
+    "test:settings": "node scripts/smoke-settings.mjs",
     "test:browser": "node scripts/smoke-browser.mjs",
     "check:windows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/check-windows.ps1",
     "dist:win": "electron-builder --win portable --x64",

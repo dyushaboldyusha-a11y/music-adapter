@@ -1,7 +1,10 @@
 const SIZE = { width: 620, height: 270 };
-const DEFAULT_PREFERENCES = { opacity: 1, scale: 1 };
+const { DEFAULT_COLOR, normalizeColor } = require('./shared/theme.js');
+const DEFAULT_PREFERENCES = { opacity: 1, scale: 1, color: DEFAULT_COLOR };
 function preferences(input = {}) {
-  return { opacity: Number.isFinite(input.opacity) ? Math.max(.25, Math.min(1, input.opacity)) : 1, scale: Number.isFinite(input.scale) ? Math.max(.5, Math.min(1.75, input.scale)) : 1 };
+  let color = DEFAULT_COLOR;
+  try { if (input.color !== undefined) color = normalizeColor(input.color); } catch {}
+  return { opacity: Number.isFinite(input.opacity) ? Math.max(.25, Math.min(1, input.opacity)) : 1, scale: Number.isFinite(input.scale) ? Math.max(.5, Math.min(1.75, input.scale)) : 1, color };
 }
 function clampBounds(saved, displays, scale = 1) {
   const size = { width: Math.round(SIZE.width * scale), height: Math.round(SIZE.height * scale) };

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Liberty — подключение музыкальных вкладок",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Яндекс Музыка, Spotify, SoundCloud, YouTube и VK Музыка в настольном виджете Liberty.",
   "minimum_chrome_version": "111",
   "permissions": [

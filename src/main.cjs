@@ -7,10 +7,13 @@ const { watchDisplays } = require('./display-placement.cjs');
 const { BrowserBridge } = require('./browser-bridge.cjs');
 const { MediaHub } = require('./media-hub.cjs');
 const { PROVIDERS, label: sourceLabel } = require('./sources.cjs');
+const { ShortcutManager } = require('./shortcuts.cjs');
+const { format: formatShortcut } = require('./shared/shortcuts.js');
+const { normalizeColor } = require('./shared/theme.js');
 const demo = process.argv.includes('--demo');
-let window, tray, media, saveTimer, placement, browserBridge;
+let window, tray, media, saveTimer, placement, browserBridge, shortcuts;
 let effectiveScale = 1;
-let settings = {}, interaction = true, shortcutAvailable = false, state = { ...EMPTY_STATE };
+let settings = {}, interaction = true, editor = null, shortcutCommandPending = false, state = { ...EMPTY_STATE };
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -19,9 +22,10 @@ else {
 }
 
 function publish() { if (window && !window.isDestroyed()) window.webContents.send('widget:state', snapshot()); }
-function snapshot() { return { ...state, interaction, shortcutAvailable, demo, browserAvailable: browserBridge?.available === true, preferences: { ...preferences(settings), scale: effectiveScale }, platform: process.platform }; }
+function snapshot() { return { ...state, interaction, shortcuts: shortcuts?.snapshot(), shortcutEditing: editor === 'shortcuts', themeEditing: editor === 'theme', shortcutAvailable: shortcuts?.snapshot().available.toggleInteraction === true, demo, browserAvailable: browserBridge?.available === true, preferences: { ...preferences(settings), scale: effectiveScale }, platform: process.platform }; }
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch (error) { console.error('Cannot save preferences', error.message); } }, 250); }
 function setInteraction(enabled) {
+  if (!enabled && editor) endEditor();
   interaction = enabled;
   window.setIgnoreMouseEvents(!enabled);
   window.setFocusable(enabled);
@@ -29,16 +33,45 @@ function setInteraction(enabled) {
   else window.blur();
   publish(); updateTray();
 }
+function interactionShortcut() {
+  const status = shortcuts?.snapshot();
+  return status?.available.toggleInteraction ? formatShortcut(status.active.toggleInteraction[0]) : 'значок в трее';
+}
+function beginEditor(name) {
+  endEditor(); setInteraction(true); editor = name; shortcuts.suspend(); publish();
+  return { ok: true };
+}
+function endEditor() {
+  if (!editor) return;
+  editor = null; shortcuts.resume(); publish(); updateTray();
+}
+async function mediaCommand(command, value) {
+  try {
+    validateCommand(command, value);
+    if (!media || !state.connected || !state.capabilities?.[command]) throw new Error('Источник не предоставляет эту команду');
+    await media.command(command, value); return { ok: true };
+  } catch (error) { return { ok: false, error: error.message }; }
+}
+async function shortcutPlayPause() {
+  if (shortcutCommandPending) return;
+  shortcutCommandPending = true;
+  try { const result = await mediaCommand('playPause'); if (!result.ok) console.warn(result.error); }
+  finally { shortcutCommandPending = false; }
+}
 function setPreferences(update) {
-  if (!update || typeof update !== 'object' || Object.keys(update).some(key => !['opacity', 'scale'].includes(key)) || Object.values(update).some(value => !Number.isFinite(value))) throw new Error('Некорректные настройки');
+  if (!update || typeof update !== 'object' || Array.isArray(update) || Object.keys(update).some(key => !['opacity', 'scale', 'color'].includes(key)) || Object.entries(update).some(([key, value]) => key !== 'color' && !Number.isFinite(value))) throw new Error('Некорректные настройки');
+  if (Object.hasOwn(update, 'color')) normalizeColor(update.color);
   const next = preferences({ ...preferences(settings), ...update });
   Object.assign(settings, next);
-  placement.restore();
+  if (Object.hasOwn(update, 'scale')) placement.restore();
+  else { save(); publish(); }
   updateTray();
 }
 function menu() {
   return Menu.buildFromTemplate([
-    { label: interaction ? 'Закрепить · пропускать клики (Num8)' : 'Управлять и перемещать (Num8)', click: () => setInteraction(!interaction) },
+    { label: `${interaction ? 'Закрепить · пропускать клики' : 'Управлять и перемещать'} (${interactionShortcut()})`, click: () => setInteraction(!interaction) },
+    { label: 'Горячие клавиши…', click: () => beginEditor('shortcuts') },
+    { label: 'Цвет интерфейса…', click: () => beginEditor('theme') },
     { label: 'Источник', submenu: [{ label: 'Автоматически', type: 'radio', checked: !state.selection || state.selection === 'auto', click: () => selectSource('auto') }, { type: 'separator' }, ...(state.sources || []).map(s => ({ label: sourceLabel(s) + (s.kind === 'browser' && s.title ? ' — ' + s.title.slice(0, 40) : ''), type: 'radio', checked: state.selection === s.id, click: () => selectSource(s.id) }))] },
     { label: 'Подключить браузер', enabled: browserBridge?.available === true, click: showPairing },
     { label: 'Отключить все браузеры', enabled: (browserBridge?.clients.size || 0) > 0, click: () => { browserBridge.revoke(); updateTray(); } },
@@ -53,9 +86,9 @@ function menu() {
     { label: 'Закрыть виджет', click: () => app.quit() }
   ]);
 }
-function updateTray() { if (tray) { tray.setToolTip(`Music Adapter · ${interaction ? 'управление включено' : 'закреплён'} · Num8`); tray.setContextMenu(menu()); } }
+function updateTray() { if (tray) { tray.setToolTip(`Music Adapter · ${interaction ? 'управление включено' : 'закреплён'} · ${interactionShortcut()}`); tray.setContextMenu(menu()); } }
 async function selectSource(id) { try { if (typeof id !== 'string' || id.length > 200) throw new Error('Некорректный источник'); await media.selectSource(id); return { ok: true }; } catch (error) { return { ok: false, error: error.message }; } }
-function showPairing() { try { setInteraction(true); const pair = browserBridge.beginPairing(); window.webContents.send('widget:pairing', pair); return { ok: true, ...pair }; } catch (error) { return { ok: false, error: error.message }; } }
+function showPairing() { try { endEditor(); setInteraction(true); const pair = browserBridge.beginPairing(); window.webContents.send('widget:pairing', pair); return { ok: true, ...pair }; } catch (error) { return { ok: false, error: error.message }; } }
 async function openMusic(provider = state.source?.provider || 'yandex', nativeApp = false) {
   const service = PROVIDERS.get(provider);
   if (!service) return { ok: false, error: 'Выберите музыкальный сервис' };
@@ -75,6 +108,8 @@ function trayImage() {
 async function start() {
   try { const saved = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'widget.json'), 'utf8')); if (saved && typeof saved === 'object') settings = saved; } catch {}
   Object.assign(settings, preferences(settings));
+  shortcuts = new ShortcutManager(globalShortcut, { toggleInteraction: () => setInteraction(!interaction), playPause: shortcutPlayPause }, settings.shortcuts);
+  settings.shortcuts = { ...shortcuts.bindings };
   const initial = layoutForDisplays(settings.bounds, screen.getAllDisplays(), settings.scale);
   effectiveScale = initial.scale;
   window = new BrowserWindow({ ...initial.bounds, transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
@@ -87,21 +122,38 @@ async function start() {
   } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
+  window.on('blur', endEditor);
+  window.webContents.on('render-process-gone', endEditor);
   const authorized = event => event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame;
   ipcMain.handle('widget:get-state', event => authorized(event) ? snapshot() : null);
+  ipcMain.handle('widget:shortcuts-open', event => authorized(event) && interaction ? beginEditor('shortcuts') : { ok: false });
+  ipcMain.handle('widget:shortcuts-cancel', event => { if (authorized(event) && editor === 'shortcuts') endEditor(); return { ok: true }; });
+  ipcMain.handle('widget:theme-open', event => authorized(event) && interaction ? beginEditor('theme') : { ok: false });
+  ipcMain.handle('widget:theme-cancel', event => { if (authorized(event) && editor === 'theme') endEditor(); return { ok: true }; });
+  ipcMain.handle('widget:theme-save', (event, color) => {
+    try {
+      if (!authorized(event) || !interaction || editor !== 'theme') throw new Error('Откройте палитру');
+      setPreferences({ color }); endEditor(); return { ok: true };
+    } catch (error) { return { ok: false, error: error.message }; }
+  });
+  ipcMain.handle('widget:shortcuts-save', (event, update) => {
+    try {
+      if (!authorized(event) || !interaction || editor !== 'shortcuts') throw new Error('Откройте настройки горячих клавиш');
+      shortcuts.configure(update); settings.shortcuts = { ...shortcuts.bindings }; editor = null;
+      save(); publish(); updateTray(); return { ok: true };
+    } catch (error) { return { ok: false, error: error.message }; }
+  });
   ipcMain.handle('widget:source', (event, id) => authorized(event) && interaction ? selectSource(id) : { ok: false });
   ipcMain.handle('widget:pair', event => authorized(event) && interaction ? showPairing() : { ok: false });
   ipcMain.handle('widget:copy-pair', event => { if (authorized(event) && interaction && browserBridge?.pairing?.expiresAt > Date.now()) clipboard.writeText(browserBridge.pairing.code); });
   ipcMain.handle('widget:preferences', (event, update) => {
-    try { if (!authorized(event) || !interaction) throw new Error('Включите управление клавишей Num8'); setPreferences(update); return { ok: true, preferences: preferences(settings) }; }
+    try { if (!authorized(event) || !interaction) throw new Error(`Включите управление: ${interactionShortcut()}`); setPreferences(update); return { ok: true, preferences: preferences(settings) }; }
     catch (error) { return { ok: false, error: error.message }; }
   });
   ipcMain.handle('widget:command', async (event, command, value) => {
     try {
-      if (!authorized(event) || !interaction) throw new Error('Включите управление клавишей Num8');
-      validateCommand(command, value);
-      if (!state.connected || !state.capabilities?.[command]) throw new Error('Источник не предоставляет эту команду');
-      await media.command(command, value); return { ok: true };
+      if (!authorized(event) || !interaction) throw new Error(`Включите управление: ${interactionShortcut()}`);
+      return await mediaCommand(command, value);
     } catch (error) { return { ok: false, error: error.message }; }
   });
   ipcMain.handle('widget:open-music', event => authorized(event) && interaction ? openMusic() : { ok: false });
@@ -109,10 +161,8 @@ async function start() {
   ipcMain.on('widget:toggle-interaction', event => { if (authorized(event)) setInteraction(!interaction); });
   tray = new Tray(trayImage());
   tray.on('click', () => setInteraction(!interaction));
-  shortcutAvailable = globalShortcut.register('num8', () => setInteraction(!interaction));
-  // A tray escape route stays available if another program owns the global hotkey.
-  globalShortcut.register('CommandOrControl+Shift+8', () => setInteraction(!interaction));
-  interaction = !shortcutAvailable || demo;
+  shortcuts.resume();
+  interaction = !shortcuts.snapshot().available.toggleInteraction || demo;
   updateTray();
   await window.loadFile(path.join(__dirname, 'renderer/index.html'));
   window.showInactive();
@@ -125,5 +175,5 @@ async function start() {
   media.start();
   updateTray();
 }
-app.on('before-quit', () => { placement?.dispose(); clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings.bounds = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } media?.stop(); browserBridge?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
+app.on('before-quit', () => { editor = null; placement?.dispose(); clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings.bounds = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } media?.stop(); browserBridge?.stop(); shortcuts?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
 app.on('window-all-closed', () => app.quit());

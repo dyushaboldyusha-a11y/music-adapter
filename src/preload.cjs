@@ -2,6 +2,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('musicWidget', {
   getState: () => ipcRenderer.invoke('widget:get-state'),
   setPreferences: update => ipcRenderer.invoke('widget:preferences', update),
+  openShortcuts: () => ipcRenderer.invoke('widget:shortcuts-open'),
+  saveShortcuts: bindings => ipcRenderer.invoke('widget:shortcuts-save', bindings),
+  cancelShortcuts: () => ipcRenderer.invoke('widget:shortcuts-cancel'),
+  openTheme: () => ipcRenderer.invoke('widget:theme-open'),
+  saveTheme: color => ipcRenderer.invoke('widget:theme-save', color),
+  cancelTheme: () => ipcRenderer.invoke('widget:theme-cancel'),
   selectSource: id => ipcRenderer.invoke('widget:source', id),
   beginPairing: () => ipcRenderer.invoke('widget:pair'),
   copyPairingCode: () => ipcRenderer.invoke('widget:copy-pair'),
