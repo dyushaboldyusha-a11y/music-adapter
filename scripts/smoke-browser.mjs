@@ -11,6 +11,9 @@ const appProfile = await mkdtemp(join(tmpdir(), 'liberty-app-'));
 const chromeProfile = await mkdtemp(join(tmpdir(), 'liberty-chrome-'));
 const extension = join(root, 'browser-extension');
 const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQ0AAAAASUVORK5CYII=';
+const wav = Buffer.alloc(44 + 8000 * 60); wav.fill(128, 44);
+wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(8000, 28); wav.writeUInt16LE(1, 32); wav.writeUInt16LE(8, 34); wav.write('data', 36); wav.writeUInt32LE(wav.length - 44, 40);
+const audioUrl = 'data:audio/wav;base64,' + wav.toString('base64');
 let app, browser;
 async function waitState(widget, predicate, timeout = 20000) {
   const deadline = Date.now() + timeout;
@@ -40,19 +43,30 @@ try {
   for (const service of services) {
     const page = await browser.newPage();
     const title = `Fixture ${service.id}`;
-    const html = `<!doctype html><html><body><h1>${title}</h1><script>
+    const html = `<!doctype html><html><body><h1>${title}</h1><button id="start">Play</button><div class="audio_page_player_cover" style="background-image:url('${png}')"></div><script>
       window.testActions=[];
-      const metadata=(suffix='')=>{navigator.mediaSession.metadata=new MediaMetadata({title:${JSON.stringify(title)}+suffix,artist:'Fixture Artist',artwork:[{src:${JSON.stringify(png)}}]});};
-      metadata();navigator.mediaSession.playbackState='playing';
+      const vk=${service.id === 'vk'};
+      const metadata=(suffix='')=>{navigator.mediaSession.metadata=new MediaMetadata({title:${JSON.stringify(title)}+suffix,artist:'Fixture Artist',artwork:vk?[]:[{src:${JSON.stringify(png)}}]});};
+      metadata();
+      if(!vk){
+      navigator.mediaSession.playbackState='playing';
       navigator.mediaSession.setPositionState({duration:258,position:84});
       navigator.mediaSession.setActionHandler('pause',()=>{window.testActions.push('pause');navigator.mediaSession.playbackState='paused';});
       navigator.mediaSession.setActionHandler('play',()=>{window.testActions.push('play');navigator.mediaSession.playbackState='playing';});
       navigator.mediaSession.setActionHandler('nexttrack',()=>{window.testActions.push('next');metadata(' next');});
       navigator.mediaSession.setActionHandler('previoustrack',()=>{window.testActions.push('previous');metadata();});
       navigator.mediaSession.setActionHandler('seekto',event=>{window.testActions.push('seek:'+event.seekTime);navigator.mediaSession.setPositionState({duration:258,position:event.seekTime});});
+      }else{
+        const audio=window.fixtureAudio=new Audio(${JSON.stringify(audioUrl)});
+        audio.addEventListener('pause',()=>window.testActions.push('pause'));
+        audio.addEventListener('seeked',()=>window.testActions.push('seek:'+Math.round(audio.currentTime)));
+        document.getElementById('start').onclick=()=>audio.play();
+        window.fixtureVKPlayer={getCurrentAudio:()=>{const a=[];a[3]=navigator.mediaSession.metadata.title;a[4]='Fixture Artist';a[5]=audio.duration||60;a[14]=${JSON.stringify(png)};return a;},getCurrentProgress:()=>audio.currentTime/(audio.duration||60),isPlaying:()=>!audio.paused,play:()=>audio.play(),pause:()=>audio.pause(),playNext:()=>{window.testActions.push('next');metadata(' next');audio.currentTime=0;},playPrev:()=>{metadata();audio.currentTime=0;},seek:ratio=>{audio.currentTime=ratio*audio.duration;}};
+      }
     </script></body></html>`;
     await page.route('**/*', route => route.fulfill({ status: 200, contentType: 'text/html', body: html }));
     await page.goto(service.url);
+    if (service.id === 'vk') { await page.locator('#start').click(); await page.waitForFunction(() => window.fixtureAudio.readyState >= 3 && !window.fixtureAudio.paused); }
     pages.push(page);
     const state = await waitState(widget, s => s.sources?.some(source => source.provider === service.id && source.id.startsWith('web:')));
     const selected = state.sources.find(source => source.provider === service.id && source.id.startsWith('web:'));
@@ -60,9 +74,17 @@ try {
     assert.equal(result.ok, true);
     await widget.waitForFunction(expected => document.getElementById('title').textContent === expected, title);
     await widget.waitForFunction(() => document.getElementById('artwork').naturalWidth === 1 && !document.getElementById('artwork').hidden);
+    if (['spotify', 'vk'].includes(service.id)) {
+      await waitState(widget, s => s.duration > 0 && s.playing);
+      let previous = Number(await widget.locator('#seek').inputValue()); const first = previous;
+      for (let i = 0; i < 12; i++) { await new Promise(resolve => setTimeout(resolve, 200)); const position = Number(await widget.locator('#seek').inputValue()); assert.ok(position >= previous - .01, `${service.id}: backward progress jump`); previous = position; }
+      assert.ok(previous - first > 1.5 && previous - first < 4, `${service.id}: playback clock drift`);
+    }
     await widget.locator('#play-pause').click();
     await page.waitForFunction(() => window.testActions.includes('pause'), null, { timeout: 15000 });
     await waitState(widget, s => !s.playing);
+    const pausedPosition = await widget.locator('#seek').inputValue(); await new Promise(resolve => setTimeout(resolve, 500)); assert.equal(await widget.locator('#seek').inputValue(), pausedPosition);
+    if (service.id === 'vk') { await page.evaluate(() => { window.getAudioPlayer = () => window.fixtureVKPlayer; }); await widget.locator('#next').waitFor({ state: 'visible' }); }
     await widget.locator('#next').click();
     await widget.waitForFunction(expected => document.getElementById('title').textContent === expected, title + ' next', { timeout: 15000 });
     const seek = await widget.evaluate(() => musicWidget.command('seek', 42));
@@ -83,7 +105,7 @@ try {
   await waitState(widget, s => !s.connected);
   await widget.evaluate(() => musicWidget.selectSource('auto'));
   await waitState(widget, s => s.connected);
-  console.log('PASS: actual Chromium MV3 extension ↔ Electron, pairing, all five service fixtures, cover transport, pause/next/seek, exact tab routing, closed tabs and inert pinned controls.');
+  console.log('PASS: Chromium MV3 ↔ Electron, five service fixtures, stable playback time, paused clock, detached VK Audio, cover transport, VK next/seek, exact routing and pinned controls.');
 } finally {
   await browser?.close(); await app?.close();
   await rm(appProfile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); await rm(chromeProfile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

@@ -1,21 +1,91 @@
 {
   "manifest_version": 3,
   "name": "Liberty — подключение музыкальных вкладок",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Яндекс Музыка, Spotify, SoundCloud, YouTube и VK Музыка в настольном виджете Liberty.",
   "minimum_chrome_version": "111",
-  "permissions": ["storage", "alarms"],
-  "host_permissions": ["http://127.0.0.1:16837/*", "https://*.yandex.net/*", "https://*.scdn.co/*", "https://*.spotifycdn.com/*", "https://*.sndcdn.com/*", "https://*.ytimg.com/*", "https://*.userapi.com/*", "https://*.vk-cdn.net/*"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_popup": "popup.html", "default_title": "Liberty" },
+  "permissions": [
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:16837/*",
+    "https://*.yandex.net/*",
+    "https://*.scdn.co/*",
+    "https://*.spotifycdn.com/*",
+    "https://*.sndcdn.com/*",
+    "https://*.ytimg.com/*",
+    "https://*.userapi.com/*",
+    "https://*.vk-cdn.net/*",
+    "https://*.vkuserphoto.ru/*",
+    "https://*.vkuserphoto.net/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Liberty"
+  },
   "content_scripts": [
     {
-      "matches": ["https://music.yandex.ru/*", "https://music.yandex.com/*", "https://music.yandex.by/*", "https://music.yandex.kz/*", "https://music.yandex.uz/*", "https://music.yandex.com.tr/*", "https://open.spotify.com/*", "https://soundcloud.com/*", "https://www.soundcloud.com/*", "https://m.soundcloud.com/*", "https://youtube.com/*", "https://www.youtube.com/*", "https://music.youtube.com/*", "https://m.youtube.com/*", "https://vk.com/*", "https://www.vk.com/*", "https://vk.ru/*", "https://www.vk.ru/*", "https://music.vk.com/*", "https://music.vk.ru/*"],
-      "js": ["services.js", "player-world.js"], "run_at": "document_start", "world": "MAIN"
+      "matches": [
+        "https://music.yandex.ru/*",
+        "https://music.yandex.com/*",
+        "https://music.yandex.by/*",
+        "https://music.yandex.kz/*",
+        "https://music.yandex.uz/*",
+        "https://music.yandex.com.tr/*",
+        "https://open.spotify.com/*",
+        "https://soundcloud.com/*",
+        "https://www.soundcloud.com/*",
+        "https://m.soundcloud.com/*",
+        "https://youtube.com/*",
+        "https://www.youtube.com/*",
+        "https://music.youtube.com/*",
+        "https://m.youtube.com/*",
+        "https://vk.com/*",
+        "https://www.vk.com/*",
+        "https://vk.ru/*",
+        "https://www.vk.ru/*",
+        "https://music.vk.com/*",
+        "https://music.vk.ru/*"
+      ],
+      "js": [
+        "services.js",
+        "vk-player.js",
+        "player-world.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
     },
     {
-      "matches": ["https://music.yandex.ru/*", "https://music.yandex.com/*", "https://music.yandex.by/*", "https://music.yandex.kz/*", "https://music.yandex.uz/*", "https://music.yandex.com.tr/*", "https://open.spotify.com/*", "https://soundcloud.com/*", "https://www.soundcloud.com/*", "https://m.soundcloud.com/*", "https://youtube.com/*", "https://www.youtube.com/*", "https://music.youtube.com/*", "https://m.youtube.com/*", "https://vk.com/*", "https://www.vk.com/*", "https://vk.ru/*", "https://www.vk.ru/*", "https://music.vk.com/*", "https://music.vk.ru/*"],
-      "js": ["content.js"], "run_at": "document_start"
+      "matches": [
+        "https://music.yandex.ru/*",
+        "https://music.yandex.com/*",
+        "https://music.yandex.by/*",
+        "https://music.yandex.kz/*",
+        "https://music.yandex.uz/*",
+        "https://music.yandex.com.tr/*",
+        "https://open.spotify.com/*",
+        "https://soundcloud.com/*",
+        "https://www.soundcloud.com/*",
+        "https://m.soundcloud.com/*",
+        "https://youtube.com/*",
+        "https://www.youtube.com/*",
+        "https://music.youtube.com/*",
+        "https://m.youtube.com/*",
+        "https://vk.com/*",
+        "https://www.vk.com/*",
+        "https://vk.ru/*",
+        "https://www.vk.ru/*",
+        "https://music.vk.com/*",
+        "https://music.vk.ru/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
     }
   ]
 }

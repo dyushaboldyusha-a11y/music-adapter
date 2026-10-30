@@ -28,6 +28,12 @@ try {
     if (-not $state.connected -or $state.title -ne 'Track') { throw 'Thumbnail read erased track metadata.' }
     if ($state.artwork -ne ('data:image/png;base64,' + [Convert]::ToBase64String($png))) { throw ('Real WinRT artwork did not round-trip as PNG: ' + $script:ArtworkError) }
     if ($state.position -lt 84 -or $state.duration -ne 258 -or -not $state.capabilities.playPause) { throw 'Timeline or transport was lost.' }
+    if ($state.sampledAt -le 0 -or $state.sampleSequence -le 0 -or -not $state.sampleOrigin) { throw 'Timeline observation identity is missing.' }
+    $sequence = $state.sampleSequence
+    $info.PlaybackRate = 2
+    $timeline.LastUpdatedTime = [DateTimeOffset]::UtcNow.AddSeconds(-5)
+    $fast = ConvertTo-PlayerState $properties $info $timeline 'YandexMusic.exe'
+    if ([Math]::Abs($fast.position - 94) -gt .5 -or $fast.playbackRate -ne 2 -or $fast.sampleSequence -le $sequence) { throw 'Playback-rate or timestamp projection is incorrect.' }
     $failed = [pscustomobject]@{}
     $failed | Add-Member ScriptMethod OpenReadAsync { throw 'Thumbnail temporarily unavailable.' }
     $properties.Title = 'Next track'; $properties.Thumbnail = $failed

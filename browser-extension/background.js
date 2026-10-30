@@ -14,7 +14,7 @@ async function cover(url) {
   if (/^data:image\/(png|jpe?g|webp|gif|bmp);base64,[A-Za-z0-9+/=]+$/i.test(url)) return url.length < 3000000 ? url : null;
   let host;
   try { const u = new URL(url); if (u.protocol !== 'https:') return null; host = u.hostname; } catch { return null; }
-  if (!['yandex.net', 'scdn.co', 'spotifycdn.com', 'sndcdn.com', 'ytimg.com', 'userapi.com', 'vk-cdn.net'].some(d => host === d || host.endsWith('.' + d))) return null;
+  if (!['yandex.net', 'scdn.co', 'spotifycdn.com', 'sndcdn.com', 'ytimg.com', 'userapi.com', 'vk-cdn.net', 'vkuserphoto.ru', 'vkuserphoto.net'].some(d => host === d || host.endsWith('.' + d))) return null;
   if (!covers.has(url)) {
     if (covers.size >= 24) covers.delete(covers.keys().next().value);
     covers.set(url, (async () => {

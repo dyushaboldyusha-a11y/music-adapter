@@ -1,6 +1,8 @@
 $script:ArtKey = ''
 $script:Artwork = $null
 $script:ArtworkError = $null
+$script:SampleOrigin = [Guid]::NewGuid().ToString('N')
+$script:SampleSequence = 0
 
 function Read-Artwork($Properties, [string]$Key) {
     if ($script:ArtKey -eq $Key -and $script:Artwork) { return $script:Artwork }
@@ -61,6 +63,9 @@ function Read-Artwork($Properties, [string]$Key) {
 function ConvertTo-PlayerState($Properties, $Info, $Timeline, [string]$Source) {
     $controls = $Info.Controls
     $playing = $null -ne $Info -and $Info.PlaybackStatus.ToString() -eq 'Playing'
+    $sampleTime = [DateTimeOffset]::UtcNow
+    $rate = if ($null -ne $Info.PlaybackRate) { [double]$Info.PlaybackRate } else { 1.0 }
+    if ([double]::IsNaN($rate) -or [double]::IsInfinity($rate) -or $rate -lt 0) { $rate = 1.0 }
     $duration = 0.0
     $position = 0.0
     try {
@@ -70,8 +75,7 @@ function ConvertTo-PlayerState($Properties, $Info, $Timeline, [string]$Source) {
             $position = [double]$Timeline.Position.TotalSeconds - $start
             if ($playing -and $Timeline.LastUpdatedTime.Year -gt 2000) {
                 $updated = [DateTimeOffset]$Timeline.LastUpdatedTime
-                $delta = ([DateTimeOffset]::UtcNow - $updated).TotalSeconds
-                $rate = if ($null -ne $Info.PlaybackRate) { [double]$Info.PlaybackRate } else { 1.0 }
+                $delta = ($sampleTime - $updated).TotalSeconds
                 $position += [Math]::Max(0, $delta) * $rate
             }
         }
@@ -90,6 +94,10 @@ function ConvertTo-PlayerState($Properties, $Info, $Timeline, [string]$Source) {
         album = $Properties.AlbumTitle
         artwork = (Read-Artwork $Properties $key)
         playing = $playing
+        playbackRate = $rate
+        sampledAt = $sampleTime.ToUnixTimeMilliseconds()
+        sampleOrigin = $script:SampleOrigin
+        sampleSequence = ++$script:SampleSequence
         position = [Math]::Max(0, [Math]::Min($duration, $position))
         duration = $duration
         shuffle = ($Info.IsShuffleActive -eq $true)

@@ -1,8 +1,9 @@
 const $ = id => document.getElementById(id);
-let state = {}, receivedAt = performance.now(), seeking = false, currentArtwork, scaleTimer, sourcesKey = '', pairExpires = 0;
+let state = {}, seeking = false, currentArtwork, scaleTimer, sourcesKey = '', pairExpires = 0;
+const playbackClock = new LibertyPlaybackClock();
 const bridge = window.musicWidget;
 const formatTime = value => { const total = Math.floor(Math.max(0, value || 0)); return total >= 3600 ? `${Math.floor(total / 3600)}:${String(Math.floor(total / 60) % 60).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}` : `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; };
-async function command(name, value) { if (!state.interaction) return; const result = await bridge.command(name, value); if (!result.ok) console.warn(result.error || 'Не удалось выполнить команду'); }
+async function command(name, value) { if (!state.interaction) return { ok: false }; const result = await bridge.command(name, value); if (!result.ok) console.warn(result.error || 'Не удалось выполнить команду'); return result; }
 function sourceLabel(source) { return `${source.name} · ${source.kind === 'app' ? 'приложение' : source.provider === 'browser' ? 'браузер' : source.browser || 'браузер'}`; }
 function updateSources() {
   const items = state.sources || [];
@@ -22,7 +23,7 @@ function updateSources() {
 function showPairing(pair) { if (!pair.ok && !pair.code) return; pairExpires = pair.expiresAt; $('pair-code').textContent = pair.code; $('copy-code').disabled = false; $('copy-code').textContent = 'Скопировать код'; $('pairing').hidden = false; }
 function update(next) {
   if (!next) return;
-  state = next; receivedAt = performance.now();
+  state = next; playbackClock.update(next);
   document.documentElement.style.setProperty('--decoration-opacity', String(state.preferences?.opacity ?? 1));
   document.body.classList.toggle('locked', !state.interaction);
   document.body.classList.toggle('connected', !!state.connected);
@@ -66,13 +67,13 @@ function update(next) {
 function paintProgress() {
   if (!$('pairing').hidden && Date.now() >= pairExpires) { $('pair-code').textContent = 'Код истёк'; $('copy-code').disabled = true; }
   if (seeking) return;
-  const position = Math.min(state.duration || 0, (state.position || 0) + (state.playing ? (performance.now() - receivedAt) / 1000 : 0));
+  const position = playbackClock.position();
   $('seek').max = state.duration || 1; $('seek').value = position;
   $('seek').style.setProperty('--progress', `${state.duration ? position / state.duration * 100 : 0}%`);
   $('elapsed').textContent = state.live ? 'В эфире' : formatTime(position);
 }
 $('seek').addEventListener('input', () => { seeking = true; $('elapsed').textContent = formatTime(Number($('seek').value)); $('seek').style.setProperty('--progress', `${Number($('seek').value) / Number($('seek').max) * 100}%`); });
-$('seek').addEventListener('change', async () => { const position = Number($('seek').value); await command('seek', position); seeking = false; });
+$('seek').addEventListener('change', async () => { const position = Number($('seek').value); playbackClock.seek(position); seeking = false; paintProgress(); const result = await command('seek', position); if (!result.ok) { playbackClock.rejectSeek(); paintProgress(); } });
 $('seek').addEventListener('pointercancel', () => { seeking = false; paintProgress(); });
 $('play-pause').addEventListener('click', () => command('playPause'));
 $('previous').addEventListener('click', () => command('previous'));
