@@ -112,11 +112,15 @@ try {
   await writeFile(join(root, 'artifacts/widget-demo.png'), Buffer.from(screenshot.data, 'base64'));
   console.log('PASS: real Electron UI, transport, scaling, selective 25% opacity, Liberty, artwork decoding, hidden unavailable actions, no error banner and continuous masked wave.');
 } finally {
+  if (socket?.readyState === WebSocket.OPEN && child.exitCode === null && !child.signalCode) {
+    socket.send(JSON.stringify({ id: ++nextId, method: 'Browser.close' }));
+    await Promise.race([exited, pause(3000)]);
+  }
   socket?.close();
   for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error('Test closed')); }
   if (child.exitCode === null && !child.signalCode) {
     if (process.platform === 'win32') child.kill(); else process.kill(-child.pid, 'SIGTERM');
   }
   await exited;
-  await rm(profile, { force: true, recursive: true });
+  await rm(profile, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
 }

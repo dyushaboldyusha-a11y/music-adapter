@@ -86,5 +86,5 @@ try {
   console.log('PASS: actual Chromium MV3 extension ↔ Electron, pairing, all five service fixtures, cover transport, pause/next/seek, exact tab routing, closed tabs and inert pinned controls.');
 } finally {
   await browser?.close(); await app?.close();
-  await rm(appProfile, { recursive: true, force: true }); await rm(chromeProfile, { recursive: true, force: true });
+  await rm(appProfile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); await rm(chromeProfile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }
