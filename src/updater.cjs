@@ -61,7 +61,10 @@ class AppUpdater extends EventEmitter {
       if (parsed.protocol !== 'https:' || !HOSTS.has(parsed.hostname) || parsed.username || parsed.password) throw new Error('Недопустимый адрес сервера обновлений');
       let response;
       try { response = await this.fetch(url, { redirect: 'manual', credentials: 'omit', signal, headers: { 'User-Agent': 'Liberty-Wave', Accept: parsed.hostname === 'api.github.com' ? 'application/vnd.github+json' : 'application/octet-stream' } }); }
-      catch { throw new Error(signal?.aborted ? 'Загрузка отменена или истекло время ожидания' : 'Нет соединения с GitHub. Попробуйте позднее'); }
+      catch (error) {
+        const code = /\b(?:net::)?(ERR_[A-Z_]+|ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED)\b/.exec(`${error?.message || ''} ${error?.cause?.code || ''}`)?.[1];
+        throw new Error(signal?.aborted ? 'Загрузка отменена или истекло время ожидания' : `Не удалось подключиться к ${parsed.hostname}${code ? ` (${code})` : ''}. Попробуйте позднее`);
+      }
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         const location = response.headers.get('location'); await response.body?.cancel();
         if (!location) throw new Error('Некорректный ответ GitHub'); url = new URL(location, url).href; continue;

@@ -4,6 +4,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { ControlWindow } = require('./control-window.cjs');
 const { AppUpdater } = require('./updater.cjs');
+const { createUpdateFetch } = require('./update-fetch.cjs');
 const { WindowsMedia, DemoMedia, EMPTY_STATE, validateCommand } = require('./media.cjs');
 const { WindowsAudio, VolumeQueue } = require('./audio.cjs');
 const { SIZE, COMPACT_SIZE, preferences, layoutForDisplays } = require('./window-state.cjs');
@@ -155,7 +156,7 @@ async function start() {
   const portableFile = process.env.PORTABLE_EXECUTABLE_FILE;
   const canInstall = process.platform === 'win32' && app.isPackaged && typeof portableFile === 'string' && path.isAbsolute(portableFile) && portableFile.toLowerCase().endsWith('.exe');
   const updateDirectory = path.join(app.getPath('userData'), 'updates');
-  updater = new AppUpdater({ currentVersion: app.getVersion(), directory: updateDirectory, supported: canInstall, fetch: (...args) => net.fetch(...args), launchInstaller: async update => {
+  updater = new AppUpdater({ currentVersion: app.getVersion(), directory: updateDirectory, supported: canInstall, fetch: createUpdateFetch(net), launchInstaller: async update => {
     if (!canInstall || !fs.statSync(portableFile).isFile()) throw new Error('Не найден исходный переносимый .exe');
     const helper = path.join(updateDirectory, 'install-update.ps1');
     const source = app.isPackaged ? path.join(process.resourcesPath, 'native/install-update.ps1') : path.join(__dirname, '../native/install-update.ps1');

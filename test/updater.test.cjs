@@ -64,3 +64,9 @@ test('canceling a download cleans staged data and keeps the current application 
   assert.equal((await downloading).ok, false); assert.equal(updater.snapshot().ready, false);
   assert.deepEqual(await fs.readdir(directory), []);
 }));
+test('connection errors identify the failed GitHub host and a safe Chromium error code', async () => withUpdater(async ({ updater }) => {
+  updater.fetch = async () => { throw new Error('net::ERR_NAME_NOT_RESOLVED https://example.invalid/?token=private'); };
+  assert.equal((await updater.check()).ok, false);
+  assert.match(updater.snapshot().error, /api\.github\.com \(ERR_NAME_NOT_RESOLVED\)/);
+  assert.ok(!updater.snapshot().error.includes('private'));
+}));
