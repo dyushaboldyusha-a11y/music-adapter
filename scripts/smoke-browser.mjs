@@ -15,34 +15,42 @@ const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCA
 const wav = Buffer.alloc(44 + 8000 * 60); wav.fill(128, 44);
 wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22); wav.writeUInt32LE(8000, 24); wav.writeUInt32LE(8000, 28); wav.writeUInt16LE(1, 32); wav.writeUInt16LE(8, 34); wav.write('data', 36); wav.writeUInt32LE(wav.length - 44, 40);
 const audioUrl = 'data:audio/wav;base64,' + wav.toString('base64');
-let app, browser;
+let app, browser, control;
+function waitDOM(widget, predicate, argument, options = {}) { return widget.waitForFunction(predicate, argument, { polling: 50, timeout: 15000, ...options }); }
 async function waitState(widget, predicate, timeout = 20000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) { const state = await widget.evaluate(() => musicWidget.getState()); if (predicate(state)) return state; await new Promise(resolve => setTimeout(resolve, 100)); }
   throw new Error('Desktop player state did not reach the expected value.');
 }
 try {
-  app = await _electron.launch({ executablePath: require('electron'), args: [root, '--disable-gpu', `--user-data-dir=${appProfile}`], timeout: 30000 });
+  app = await _electron.launch({ executablePath: require('electron'), args: [root, '--widget-only', '--disable-gpu', `--user-data-dir=${appProfile}`], timeout: 30000 });
   const widget = await app.firstWindow();
-  await widget.waitForFunction(() => !!window.musicWidget);
+  await waitDOM(widget, () => !!window.musicWidget);
   await waitState(widget, state => state.browserAvailable === true);
-  if (!(await widget.evaluate(() => musicWidget.getState())).interaction) await widget.evaluate(() => musicWidget.toggleInteraction());
+  await app.evaluate(({ app }) => app.emit('second-instance'));
+  while (!(control = app.windows().find(page => page.url().endsWith('/control/index.html')))) await new Promise(resolve => setTimeout(resolve, 50));
+  await control.waitForFunction(() => !!window.libertyControl);
+  await control.waitForFunction(() => document.visibilityState === 'visible', null, { polling: 50, timeout: 10000 });
+  await app.evaluate(({ BrowserWindow }) => {
+    const target = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().endsWith('/renderer/index.html'));
+    const original = target.setIgnoreMouseEvents.bind(target); globalThis.libertyInteractionCalls = [];
+    target.setIgnoreMouseEvents = (value, ...args) => { globalThis.libertyInteractionCalls.push({ ignore: value, stack: new Error().stack }); return original(value, ...args); };
+  });
+  assert.equal((await control.evaluate(() => libertyControl.action('interaction', true))).ok, true, 'Control window must be visible before sending commands');
   await waitState(widget, state => state.interaction === true);
-  await widget.evaluate(() => musicWidget.openShortcuts());
-  await waitState(widget, state => state.shortcutEditing);
-  assert.equal((await widget.evaluate(() => musicWidget.saveShortcuts({ toggleInteraction: 'F8', playPause: 'F9', next: 'F10', previous: 'F11', volumeUp: 'F5', volumeDown: 'F6', mute: 'F7' }))).ok, true);
+  await waitDOM(widget, () => !document.body.classList.contains('locked'));
+  assert.equal((await control.evaluate(() => libertyControl.action('shortcuts', { toggleInteraction: 'F8', playPause: 'F9', next: 'F10', previous: 'F11', volumeUp: 'F5', volumeDown: 'F6', mute: 'F7' }))).ok, true);
   browser = await chromium.launchPersistentContext(chromeProfile, { channel: 'chromium', headless: false, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
   const worker = browser.serviceWorkers()[0] || await browser.waitForEvent('serviceworker');
   const extensionId = new URL(worker.url()).host;
   const popup = await browser.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  const pair = await widget.evaluate(() => musicWidget.beginPairing());
+  const pair = await control.evaluate(() => libertyControl.action('pair'));
   assert.equal(pair.ok, true);
   await popup.locator('#code').fill(pair.code);
   await popup.locator('#pair button').click();
   try { await popup.locator('#pair').waitFor({ state: 'hidden', timeout: 10000 }); }
   catch { throw new Error('Extension pairing failed: ' + await popup.locator('#status').textContent()); }
-  await widget.locator('#close-pair').click();
   const pages = [];
   for (const service of services) {
     const page = await browser.newPage();
@@ -74,23 +82,24 @@ try {
     pages.push(page);
     const state = await waitState(widget, s => s.sources?.some(source => source.provider === service.id && source.id.startsWith('web:')));
     const selected = state.sources.find(source => source.provider === service.id && source.id.startsWith('web:'));
-    const result = await widget.evaluate(id => musicWidget.selectSource(id), selected.id);
+    const result = await control.evaluate(id => libertyControl.action('source', id), selected.id);
     assert.equal(result.ok, true);
-    await widget.waitForFunction(expected => document.getElementById('title').textContent === expected, title);
-    await widget.waitForFunction(() => document.getElementById('artwork').naturalWidth === 1 && !document.getElementById('artwork').hidden);
+    await waitDOM(widget, expected => document.getElementById('title').textContent === expected, title);
+    await waitDOM(widget, () => document.getElementById('artwork').naturalWidth === 1 && !document.getElementById('artwork').hidden);
     if (['spotify', 'vk'].includes(service.id)) {
       await waitState(widget, s => s.duration > 0 && s.playing);
       let previous = Number(await widget.locator('#seek').inputValue()); const first = previous;
       for (let i = 0; i < 12; i++) { await new Promise(resolve => setTimeout(resolve, 200)); const position = Number(await widget.locator('#seek').inputValue()); assert.ok(position >= previous - .01, `${service.id}: backward progress jump`); previous = position; }
       assert.ok(previous - first > 1.5 && previous - first < 4, `${service.id}: playback clock drift`);
     }
+    assert.equal((await widget.evaluate(() => musicWidget.getState())).interaction, true, `Overlay must remain interactive before pausing ${service.id}`);
     await widget.locator('#play-pause').click();
     await page.waitForFunction(() => window.testActions.includes('pause'), null, { timeout: 15000 });
     await waitState(widget, s => !s.playing);
     const pausedPosition = await widget.locator('#seek').inputValue(); await new Promise(resolve => setTimeout(resolve, 500)); assert.equal(await widget.locator('#seek').inputValue(), pausedPosition);
     if (service.id === 'vk') { await page.evaluate(() => { window.getAudioPlayer = () => window.fixtureVKPlayer; }); await widget.locator('#next').waitFor({ state: 'visible' }); }
     await widget.locator('#next').click();
-    await widget.waitForFunction(expected => document.getElementById('title').textContent === expected, title + ' next', { timeout: 15000 });
+    await waitDOM(widget, expected => document.getElementById('title').textContent === expected, title + ' next', { timeout: 15000 });
     const seek = await widget.evaluate(() => musicWidget.command('seek', 42));
     assert.equal(seek.ok, true);
     await page.waitForFunction(() => window.testActions.includes('seek:42'));
@@ -108,12 +117,12 @@ try {
   const button = widget.locator('#play-pause');
   const box = await button.boundingBox();
   await widget.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await widget.evaluate(() => musicWidget.toggleInteraction());
-  await widget.waitForFunction(() => document.body.classList.contains('locked'));
+  await control.evaluate(() => libertyControl.action('interaction', false));
+  await waitDOM(widget, () => document.body.classList.contains('locked'));
   await widget.mouse.move(1, 1); await widget.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await widget.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   const visual = await button.evaluate(el => ({ transform: getComputedStyle(el).transform, pointerEvents: getComputedStyle(el).pointerEvents, inert: el.closest('main').inert }));
   assert.equal(visual.transform, 'none'); assert.equal(visual.pointerEvents, 'none'); assert.equal(visual.inert, true);
-  assert.equal((await widget.evaluate(() => musicWidget.selectSource('auto'))).ok, false);
+  assert.equal(await widget.evaluate(() => typeof musicWidget.selectSource), 'undefined');
   await pages.at(-1).bringToFront();
   await pressGlobalKeys(['F9']); await waitState(widget, s => s.playing && !s.interaction);
   assert.equal(await pages.at(-1).evaluate(() => window.fixtureAudio.paused), false);
@@ -130,9 +139,12 @@ try {
   await pressGlobalKeys(['F8']); await waitState(widget, s => s.interaction);
   await pages.at(-1).close();
   await waitState(widget, s => !s.connected);
-  await widget.evaluate(() => musicWidget.selectSource('auto'));
+  await control.evaluate(() => libertyControl.action('source', 'auto'));
   await waitState(widget, s => s.connected);
   console.log('PASS: Chromium MV3 ↔ Electron, five service fixtures, stable playback time, paused clock, detached VK Audio, cover transport, VK next/seek, exact routing, global playback hotkeys with VK tab focused and pinned mouse controls.');
+} catch (error) {
+  if (app) console.error('Interaction diagnostic:', JSON.stringify(await app.evaluate(() => globalThis.libertyInteractionCalls).catch(() => [])));
+  throw error;
 } finally {
   await browser?.close(); await app?.close();
   await rm(appProfile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); await rm(chromeProfile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });

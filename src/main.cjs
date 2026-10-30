@@ -1,7 +1,8 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, Menu, Tray, nativeImage, screen, shell, clipboard, net } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, Tray, nativeImage, screen, shell, clipboard, net } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { ControlWindow } = require('./control-window.cjs');
 const { AppUpdater } = require('./updater.cjs');
 const { WindowsMedia, DemoMedia, EMPTY_STATE, validateCommand } = require('./media.cjs');
 const { WindowsAudio, VolumeQueue } = require('./audio.cjs');
@@ -9,7 +10,7 @@ const { SIZE, COMPACT_SIZE, preferences, layoutForDisplays } = require('./window
 const { watchDisplays } = require('./display-placement.cjs');
 const { BrowserBridge } = require('./browser-bridge.cjs');
 const { MediaHub } = require('./media-hub.cjs');
-const { PROVIDERS, label: sourceLabel } = require('./sources.cjs');
+const { PROVIDERS } = require('./sources.cjs');
 const { ShortcutManager } = require('./shortcuts.cjs');
 const { format: formatShortcut } = require('./shared/shortcuts.js');
 const { normalizeColor } = require('./shared/theme.js');
@@ -24,21 +25,22 @@ app.setPath('userData', profilePath);
 app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('io.musicadapter.widget');
 const demo = process.argv.includes('--demo');
+let controls, controlCapture = false;
 let window, tray, media, saveTimer, placement, browserBridge, shortcuts, updater, audio;
 let mediaState = { ...EMPTY_STATE }, audioLevel = { available: false, level: 0 };
 const volumeQueue = new VolumeQueue(() => state, mediaCommand);
 let effectiveScale = 1;
-let settings = {}, interaction = true, editor = null, shortcutCommandPending = false, state = { ...EMPTY_STATE };
+let settings = {}, interaction = true, shortcutCommandPending = false, state = { ...EMPTY_STATE };
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance', () => { if (window) setInteraction(true); });
+  app.on('second-instance', () => { if (controls) openControls(); });
   app.whenReady().then(start).catch(error => { console.error(error); app.quit(); });
 }
 
-function publish() { if (window && !window.isDestroyed()) window.webContents.send('widget:state', snapshot()); }
-function snapshot() { return { ...state, interaction, compact: compactLayout(), audio: audioLevel, waveEditing: editor === 'wave', pairingEditing: editor === 'pairing', shortcuts: shortcuts?.snapshot(), shortcutEditing: editor === 'shortcuts', themeEditing: editor === 'theme', updateEditing: editor === 'updates', updates: updater?.snapshot(), shortcutAvailable: shortcuts?.snapshot().available.toggleInteraction === true, demo, browserAvailable: browserBridge?.available === true, preferences: { ...preferences(settings), scale: effectiveScale }, platform: process.platform }; }
-function compactLayout() { return settings.compact === true && !editor; }
+function publish() { if (window && !window.isDestroyed()) window.webContents.send('widget:state', snapshot()); controls?.publish(); }
+function snapshot() { return { ...state, interaction, compact: compactLayout(), audio: audioLevel, shortcuts: shortcuts?.snapshot(), updates: updater?.snapshot(), shortcutAvailable: shortcuts?.snapshot().available.toggleInteraction === true, demo, browserAvailable: browserBridge?.available === true, preferences: { ...preferences(settings), scale: effectiveScale }, platform: process.platform }; }
+function compactLayout() { return settings.compact === true; }
 function boundsKey() { return compactLayout() ? 'compactBounds' : 'bounds'; }
 function restoreLayout(reset = false) { return placement?.restore(reset, settings[boundsKey()] || window.getBounds()); }
 function refreshState() {
@@ -50,7 +52,6 @@ function refreshState() {
 }
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch (error) { console.error('Cannot save preferences', error.message); } }, 250); }
 function setInteraction(enabled, restore = true) {
-  if (!enabled && editor) endEditor();
   interaction = enabled;
   window.setIgnoreMouseEvents(!enabled);
   window.setFocusable(enabled);
@@ -61,14 +62,6 @@ function setInteraction(enabled, restore = true) {
 function interactionShortcut() {
   const status = shortcuts?.snapshot();
   return status?.available.toggleInteraction ? formatShortcut(status.active.toggleInteraction[0]) : 'значок в трее';
-}
-function beginEditor(name) {
-  endEditor(false); editor = name; setInteraction(true, false); restoreLayout(); if (name !== 'pairing') shortcuts.suspend(); publish();
-  return { ok: true };
-}
-function endEditor(restore = true) {
-  if (!editor) return;
-  editor = null; shortcuts.resume(); if (restore) restoreLayout(); publish(); updateTray();
 }
 async function mediaCommand(command, value) {
   try {
@@ -104,37 +97,52 @@ function setPreferences(update) {
   save(); refreshState();
   updateTray();
 }
-function menu() {
-  return Menu.buildFromTemplate([
-    { label: `${interaction ? 'Закрепить · пропускать клики' : 'Управлять и перемещать'} (${interactionShortcut()})`, click: () => setInteraction(!interaction) },
-    { label: 'Горячие клавиши…', click: () => beginEditor('shortcuts') },
-    { label: 'Компактный режим', type: 'checkbox', checked: settings.compact === true, click: item => setPreferences({ compact: item.checked }) },
-    { label: 'Волна и свечение…', click: () => beginEditor('wave') },
-    { label: 'Цвет интерфейса…', click: () => beginEditor('theme') },
-    { label: 'Обновления Liberty Wave…', click: () => beginEditor('updates') },
-    { label: 'Источник', submenu: [{ label: 'Автоматически', type: 'radio', checked: !state.selection || state.selection === 'auto', click: () => selectSource('auto') }, { type: 'separator' }, ...(state.sources || []).map(s => ({ label: sourceLabel(s) + (s.kind === 'browser' && s.title ? ' — ' + s.title.slice(0, 40) : ''), type: 'radio', checked: state.selection === s.id, click: () => selectSource(s.id) }))] },
-    { label: 'Подключить браузер', enabled: browserBridge?.available === true, click: showPairing },
-    { label: 'Отключить все браузеры', enabled: (browserBridge?.clients.size || 0) > 0, click: () => { browserBridge.revoke(); updateTray(); } },
-    { label: 'Открыть сервис', submenu: [{ label: 'Яндекс Музыка · приложение', click: () => openMusic('yandex', true) }, { label: 'Spotify · приложение', click: () => openMusic('spotify', true) }, { type: 'separator' }, ...[...PROVIDERS.values()].map(s => ({ label: `${s.name} · браузер`, click: () => openMusic(s.id) }))] },
-    { type: 'separator' },
-    { label: 'Непрозрачность оформления', submenu: [.25, .4, .5, .65, .85, 1].map(opacity => ({ label: `${Math.round(opacity * 100)}%`, type: 'radio', checked: preferences(settings).opacity === opacity, click: () => setPreferences({ opacity }) })) },
-    { label: 'Масштаб · Ctrl + колесо', submenu: [.5, .65, .75, 1, 1.25, 1.5, 1.75].map(scale => ({ label: `${Math.round(scale * 100)}%`, type: 'radio', checked: Math.abs(preferences(settings).scale - scale) < .01, click: () => setPreferences({ scale }) })) },
-    { label: state.connected ? sourceLabel(state.source) : 'Ожидание плеера', enabled: false },
-    { label: 'Вернуть в угол экрана', click: () => restoreLayout(true) },
-    { label: 'Запускать с Windows', type: 'checkbox', visible: process.platform === 'win32' && app.isPackaged && !process.env.PORTABLE_EXECUTABLE_FILE, checked: process.platform === 'win32' && app.getLoginItemSettings().openAtLogin, click: item => app.setLoginItemSettings({ openAtLogin: item.checked }) },
-    { type: 'separator' },
-    { label: 'Закрыть виджет', click: () => app.quit() }
-  ]);
-}
-function updateTray() { if (tray) { tray.setToolTip(`${APP_NAME} · ${interaction ? 'управление включено' : 'закреплён'} · ${interactionShortcut()}`); tray.setContextMenu(menu()); } }
+function updateTray() { if (tray) tray.setToolTip(`${APP_NAME} · нажмите, чтобы открыть приложение`); }
 async function selectSource(id) { try { if (typeof id !== 'string' || id.length > 200) throw new Error('Некорректный источник'); await media.selectSource(id); return { ok: true }; } catch (error) { return { ok: false, error: error.message }; } }
-function showPairing() { try { beginEditor('pairing'); const pair = browserBridge.beginPairing(); window.webContents.send('widget:pairing', pair); return { ok: true, ...pair }; } catch (error) { return { ok: false, error: error.message }; } }
 async function openMusic(provider = state.source?.provider || 'yandex', nativeApp = false) {
   const service = PROVIDERS.get(provider);
   if (!service) return { ok: false, error: 'Выберите музыкальный сервис' };
   const url = nativeApp && provider === 'yandex' ? 'yandexmusic://' : nativeApp && provider === 'spotify' ? 'spotify:' : service.url;
   try { await shell.openExternal(url); return { ok: true }; }
   catch { return { ok: false, error: 'Откройте плеер самостоятельно' }; }
+}
+function controlSnapshot() {
+  return { ...snapshot(), preferences: preferences(settings), effectiveScale, version: app.getVersion(), pairedBrowsers: browserBridge?.clients.size || 0, pairing: browserBridge?.pairing || null, controlCapture };
+}
+async function openControls(page = 'home') {
+  if (!['home', 'sources', 'appearance', 'shortcuts', 'updates'].includes(page)) return { ok: false, error: 'Неизвестный раздел' };
+  try { await controls.open(page); return { ok: true }; }
+  catch (error) { return { ok: false, error: error.message }; }
+}
+function endControlCapture() {
+  if (!controlCapture) return;
+  controlCapture = false; shortcuts.resume(); publish(); updateTray();
+}
+async function controlAction(action, value) {
+  switch (action) {
+    case 'preferences': setPreferences(value); return { ok: true };
+    case 'command': return mediaCommand(value?.command, value?.value);
+    case 'source': return selectSource(value);
+    case 'interaction': if (typeof value !== 'boolean') throw new Error('Некорректный режим виджета'); setInteraction(value); return { ok: true };
+    case 'restore': restoreLayout(true); return { ok: true };
+    case 'pair': { const pair = browserBridge.beginPairing(); publish(); return { ok: true, ...pair }; }
+    case 'copyPair': if (browserBridge?.pairing?.expiresAt > Date.now()) { clipboard.writeText(browserBridge.pairing.code); return { ok: true }; } throw new Error('Код уже истёк');
+    case 'revoke': browserBridge.revoke(); publish(); updateTray(); return { ok: true };
+    case 'openMusic': if (!value || typeof value.nativeApp !== 'boolean') throw new Error('Некорректный сервис'); return openMusic(value.provider, value.nativeApp);
+    case 'extension': await shell.openExternal('https://github.com/dyushaboldyusha-a11y/music-adapter/releases/latest'); return { ok: true };
+    case 'capture':
+      if (typeof value !== 'boolean') throw new Error('Некорректный режим записи');
+      if (!value) { endControlCapture(); return { ok: true }; }
+      if (!controls.window.isFocused()) throw new Error('Вернитесь в Liberty Wave');
+      controlCapture = true; shortcuts.suspend(); publish(); return { ok: true };
+    case 'shortcuts':
+      shortcuts.configure(value); settings.shortcuts = { ...shortcuts.bindings }; controlCapture = false; save(); publish(); updateTray(); return { ok: true };
+    case 'update':
+      if (!['check', 'download', 'install', 'cancel'].includes(value)) throw new Error('Неизвестное действие обновления');
+      if (value === 'cancel') { updater.cancel(); return { ok: true }; } return updater[value]();
+    case 'quit': app.quit(); return { ok: true };
+    default: throw new Error('Неизвестное действие');
+  }
 }
 function trayImage() {
   return nativeImage.createFromPath(ICON_PATH).resize({ width: 32, height: 32, quality: 'best' });
@@ -157,10 +165,12 @@ async function start() {
     child.unref(); setTimeout(() => app.quit(), 250);
   } });
   updater.on('state', publish);
+  controls = new ControlWindow({ BrowserWindow, ipcMain, screen, icon: nativeImage.createFromPath(ICON_PATH), getState: controlSnapshot, action: controlAction, getBounds: () => settings.controlBounds, saveBounds: value => { settings.controlBounds = value; save(); }, onBlur: endControlCapture });
   const initial = layoutForDisplays(settings[boundsKey()], screen.getAllDisplays(), settings.scale, compactLayout() ? COMPACT_SIZE : SIZE);
   effectiveScale = initial.scale;
   window = new BrowserWindow({ ...initial.bounds, title: APP_NAME, icon: nativeImage.createFromPath(ICON_PATH), transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   window.setAlwaysOnTop(true, 'screen-saver');
+  window.removeMenu();
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   window.webContents.setZoomFactor(effectiveScale);
   window.on('move', () => { settings[boundsKey()] = window.getBounds(); save(); });
@@ -169,56 +179,18 @@ async function start() {
   } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', event => event.preventDefault());
-  window.on('blur', () => { if (editor !== 'pairing') endEditor(); });
-  window.webContents.on('render-process-gone', endEditor);
   const authorized = event => event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame;
+  ipcMain.handle('widget:controls-open', (event, page) => authorized(event) && interaction ? openControls(page) : { ok: false });
   ipcMain.handle('widget:get-state', event => authorized(event) ? snapshot() : null);
-  ipcMain.handle('widget:wave-open', event => authorized(event) && interaction ? beginEditor('wave') : { ok: false });
-  ipcMain.handle('widget:wave-close', event => { if (authorized(event) && editor === 'wave') endEditor(); return { ok: true }; });
-  ipcMain.handle('widget:pair-close', event => { if (authorized(event) && editor === 'pairing') endEditor(); return { ok: true }; });
-  ipcMain.handle('widget:updates-open', event => authorized(event) && interaction ? beginEditor('updates') : { ok: false });
-  ipcMain.handle('widget:updates-close', event => { if (authorized(event) && editor === 'updates') endEditor(); return { ok: true }; });
-  ipcMain.handle('widget:updates-action', (event, action) => {
-    if (!authorized(event) || !interaction || editor !== 'updates') return { ok: false, error: 'Откройте меню обновлений' };
-    if (!['check', 'download', 'install', 'cancel'].includes(action)) return { ok: false, error: 'Неизвестное действие обновления' };
-    if (action === 'cancel') { updater.cancel(); return { ok: true }; }
-    return updater[action]();
-  });
-  ipcMain.handle('widget:shortcuts-open', event => authorized(event) && interaction ? beginEditor('shortcuts') : { ok: false });
-  ipcMain.handle('widget:shortcuts-cancel', event => { if (authorized(event) && editor === 'shortcuts') endEditor(); return { ok: true }; });
-  ipcMain.handle('widget:theme-open', event => authorized(event) && interaction ? beginEditor('theme') : { ok: false });
-  ipcMain.handle('widget:theme-cancel', event => { if (authorized(event) && editor === 'theme') endEditor(); return { ok: true }; });
-  ipcMain.handle('widget:theme-save', (event, color) => {
-    try {
-      if (!authorized(event) || !interaction || editor !== 'theme') throw new Error('Откройте палитру');
-      setPreferences({ color }); endEditor(); return { ok: true };
-    } catch (error) { return { ok: false, error: error.message }; }
-  });
-  ipcMain.handle('widget:shortcuts-save', (event, update) => {
-    try {
-      if (!authorized(event) || !interaction || editor !== 'shortcuts') throw new Error('Откройте настройки горячих клавиш');
-      shortcuts.configure(update); settings.shortcuts = { ...shortcuts.bindings }; editor = null; restoreLayout();
-      save(); publish(); updateTray(); return { ok: true };
-    } catch (error) { return { ok: false, error: error.message }; }
-  });
-  ipcMain.handle('widget:source', (event, id) => authorized(event) && interaction ? selectSource(id) : { ok: false });
-  ipcMain.handle('widget:pair', event => authorized(event) && interaction ? showPairing() : { ok: false });
-  ipcMain.handle('widget:copy-pair', event => { if (authorized(event) && interaction && browserBridge?.pairing?.expiresAt > Date.now()) clipboard.writeText(browserBridge.pairing.code); });
-  ipcMain.handle('widget:preferences', (event, update) => {
-    try { if (!authorized(event) || !interaction) throw new Error(`Включите управление: ${interactionShortcut()}`); setPreferences(update); return { ok: true, preferences: preferences(settings) }; }
-    catch (error) { return { ok: false, error: error.message }; }
-  });
   ipcMain.handle('widget:command', async (event, command, value) => {
     try {
       if (!authorized(event) || !interaction) throw new Error(`Включите управление: ${interactionShortcut()}`);
       return await mediaCommand(command, value);
     } catch (error) { return { ok: false, error: error.message }; }
   });
-  ipcMain.handle('widget:open-music', event => authorized(event) && interaction ? openMusic() : { ok: false });
-  ipcMain.on('widget:menu', event => { if (authorized(event) && interaction) menu().popup({ window }); });
-  ipcMain.on('widget:toggle-interaction', event => { if (authorized(event)) setInteraction(!interaction); });
   tray = new Tray(trayImage());
-  tray.on('click', () => setInteraction(!interaction));
+  tray.on('click', () => openControls());
+  tray.on('right-click', () => openControls());
   shortcuts.resume();
   interaction = !shortcuts.snapshot().available.toggleInteraction || demo;
   updateTray();
@@ -237,8 +209,10 @@ async function start() {
     audio.start();
   }
   media.on('state', value => { const changed = JSON.stringify([value.connected, value.selection, value.sources?.map(s => [s.id,s.title])]) !== JSON.stringify([state.connected, state.selection, state.sources?.map(s => [s.id,s.title])]); mediaState = value; refreshState(); if (changed) updateTray(); });
+  browserBridge.on('change', () => controls.publish());
   media.start();
   updateTray();
+  if (!demo && !process.argv.includes('--widget-only')) await openControls();
 }
-app.on('before-quit', () => { updater?.stop(); placement?.dispose(); clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings[boundsKey()] = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } audio?.stop(); media?.stop(); browserBridge?.stop(); shortcuts?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
+app.on('before-quit', () => { controls?.dispose(); updater?.stop(); placement?.dispose(); clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings[boundsKey()] = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } audio?.stop(); media?.stop(); browserBridge?.stop(); shortcuts?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
 app.on('window-all-closed', () => app.quit());

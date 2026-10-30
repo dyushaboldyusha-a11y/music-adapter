@@ -18,7 +18,8 @@
     "check:branding": "node scripts/check-branding.cjs",
     "dist:win": "electron-builder --win portable --x64",
     "pack:win": "electron-builder --win --dir --x64",
-    "test:features": "node scripts/smoke-features.mjs"
+    "test:features": "node scripts/smoke-features.mjs",
+    "test:control": "node scripts/smoke-control.mjs"
   },
   "devDependencies": {
     "electron": "45.1.0",

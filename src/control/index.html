@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Liberty Wave</title><link rel="icon" href="../assets/liberty-wave.png"><link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <svg class="library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="home-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="4"/><path d="M7 9h10M7 13h4m-4 3h6"/></symbol>
+    <symbol id="source-icon" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="5.5" cy="18.5" rx="3.5" ry="2.5"/><ellipse cx="16.5" cy="16.5" rx="3.5" ry="2.5"/></symbol>
+    <symbol id="theme-icon" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-3.7c-1-.7-.4-2.3.8-2.3H17a4 4 0 0 0 4-4c0-4.5-4-8-9-8Z"/><circle cx="7" cy="10" r=".8"/><circle cx="10" cy="7" r=".8"/><circle cx="15" cy="7.5" r=".8"/></symbol>
+    <symbol id="keys-icon" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M6 9h1m4 0h1m4 0h1M6 12h1m4 0h1m4 0h1M7 15h10"/></symbol>
+    <symbol id="update-icon" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-1.5 5M20 4v7h-7m-1-4v6l3 2"/></symbol>
+    <symbol id="exit-icon" viewBox="0 0 24 24"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5m4-14 5 5-5 5M9 12h12"/></symbol>
+    <symbol id="play-icon" viewBox="0 0 24 24"><path d="m9 5 11 7-11 7Z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="pause-icon" viewBox="0 0 24 24"><path d="M8 5v14m8-14v14" stroke-width="4"/></symbol>
+    <symbol id="next-icon" viewBox="0 0 24 24"><path d="m5 5 11 7-11 7Z" fill="currentColor" stroke="none"/><path d="M18 5v14" stroke-width="2.5"/></symbol>
+    <symbol id="prev-icon" viewBox="0 0 24 24"><path d="m19 5-11 7 11 7Z" fill="currentColor" stroke="none"/><path d="M6 5v14" stroke-width="2.5"/></symbol>
+    <symbol id="volume-icon" viewBox="0 0 24 24"><path d="M11 4 5 9H2v6h3l6 5ZM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
+    <symbol id="mute-icon" viewBox="0 0 24 24"><path d="M11 4 5 9H2v6h3l6 5Zm5 5 6 6m0-6-6 6"/></symbol>
+    <symbol id="copy-icon" viewBox="0 0 24 24"><rect x="8" y="3" width="12" height="15" rx="2"/><path d="M5 7H4v14h12v-1"/></symbol>
+    <symbol id="arrow-icon" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+  </svg>
+  <header class="titlebar">
+    <img src="../assets/liberty-wave.png" alt="" width="28" height="28"><h1>Liberty Wave</h1><span class="version" id="version"></span>
+    <div class="window-buttons"><button id="window-minimize" aria-label="Свернуть" title="Свернуть">─</button><button id="window-maximize" aria-label="Развернуть окно" title="Развернуть окно">□</button><button id="window-close" aria-label="Скрыть окно управления" title="Скрыть окно">×</button></div>
+  </header>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="nav-heading">ВАША МУЗЫКА</div>
+      <nav aria-label="Разделы Liberty Wave">
+        <button data-page="home" aria-label="Мой виджет" title="Мой виджет" aria-current="page"><svg><use href="#home-icon"/></svg><span>Мой виджет</span></button>
+        <button data-page="sources" aria-label="Источники" title="Источники"><svg><use href="#source-icon"/></svg><span>Источники</span></button>
+        <button data-page="appearance" aria-label="Внешний вид" title="Внешний вид"><svg><use href="#theme-icon"/></svg><span>Внешний вид</span></button>
+        <button data-page="shortcuts" aria-label="Горячие клавиши" title="Горячие клавиши"><svg><use href="#keys-icon"/></svg><span>Горячие клавиши</span></button>
+        <button data-page="updates" aria-label="Обновления" title="Обновления"><svg><use href="#update-icon"/></svg><span>Обновления</span><i id="update-dot" hidden></i></button>
+      </nav>
+      <div class="sidebar-bottom"><div class="connection"><span id="connection-dot"></span><span id="connection-status">Ожидание плеера</span></div><button class="quit-button" id="quit" aria-label="Завершить работу" title="Завершить работу"><svg><use href="#exit-icon"/></svg><span>Завершить работу</span></button></div>
+    </aside>
+    <main id="content">
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <section id="page-home" class="page" aria-labelledby="home-title">
+        <div class="page-heading"><div><p class="eyebrow">УПРАВЛЕНИЕ</p><h2 id="home-title">Мой виджет</h2><p>Управляйте музыкой и поведением виджета.</p></div><span class="status-badge" id="mode-badge">Закреплён</span></div>
+        <article class="card now-playing">
+          <div class="track-cover"><img id="artwork" alt="Обложка альбома" hidden><svg id="cover-placeholder"><use href="#source-icon"/></svg></div>
+          <div class="track"><span class="eyebrow" id="playing-label">СЕЙЧАС ИГРАЕТ</span><h3 id="track-title">Включите музыку</h3><p id="track-artist">Выберите приложение или вкладку</p><span id="track-source" class="track-source"></span></div>
+          <div class="transport"><button id="previous" class="icon-button" aria-label="Предыдущий трек" hidden><svg><use href="#prev-icon"/></svg></button><button id="play-pause" class="play-button" aria-label="Пауза" hidden><svg><use id="play-use" href="#pause-icon"/></svg></button><button id="next" class="icon-button" aria-label="Следующий трек" hidden><svg><use href="#next-icon"/></svg></button></div>
+          <div class="timeline"><input id="seek" type="range" min="0" max="1" step="0.1" value="0" aria-label="Позиция воспроизведения"><div class="times"><span id="elapsed">0:00</span><span id="duration">—:—</span></div></div>
+          <div class="volume-row" id="volume-row" hidden><button class="icon-button" id="mute" aria-label="Выключить звук"><svg><use id="volume-use" href="#volume-icon"/></svg></button><input id="volume" type="range" min="0" max="100" step="1" value="65" aria-label="Громкость выбранного плеера"><output id="volume-value">65%</output></div>
+        </article>
+        <h3 class="section-title">Поведение виджета</h3>
+        <div class="card settings-list">
+          <label class="setting-row"><span><strong>Перемещение и управление</strong><small id="interaction-description">Клики проходят сквозь виджет</small></span><span class="row-end"><kbd id="interaction-key"></kbd><input id="interaction" class="switch" type="checkbox" aria-label="Включить перемещение и управление виджетом"></span></label>
+          <label class="setting-row"><span><strong>Компактный режим</strong><small>Небольшая полоска с музыкой и кнопками</small></span><input id="compact" class="switch" type="checkbox"></label>
+          <button id="restore" class="setting-row link-row"><span><strong>Вернуть виджет на экран</strong><small>Разместить в правом верхнем углу</small></span><svg><use href="#arrow-icon"/></svg></button>
+        </div>
+        <h3 class="section-title">Источник музыки</h3>
+        <div class="card source-choice"><label for="home-source">Выбранный плеер</label><select id="home-source" aria-label="Источник музыки"></select><button class="text-button" data-go="sources">Подключить другой источник <span>→</span></button></div>
+        <p class="footnote">Закрытие этого окна оставит виджет работающим. Открыть Liberty Wave снова можно через значок в трее или запуск приложения.</p>
+      </section>
+      <section id="page-sources" class="page" aria-labelledby="sources-title" hidden>
+        <div class="page-heading"><div><p class="eyebrow">ПОДКЛЮЧЕНИЯ</p><h2 id="sources-title">Источники музыки</h2><p>Приложение или конкретная вкладка браузера.</p></div></div>
+        <div class="card source-choice"><label for="source">Активный источник</label><select id="source" aria-label="Активный источник музыки"></select><p class="footnote">При ручном выборе команды останутся у этого плеера, даже если он закроется.</p></div>
+        <h3 class="section-title">Музыкальные сервисы</h3><div class="card settings-list" id="services"></div>
+        <h3 class="section-title">Расширение браузера</h3>
+        <div class="card browser-card"><div class="browser-heading"><span class="service-icon extension-icon">↗</span><div><strong>Liberty Wave Connector</strong><p id="browser-status">Браузер ещё не подключён</p></div></div><p class="description">Установите расширение, создайте код и введите его в окне расширения. Затем обновите музыкальную вкладку.</p><div class="button-row"><button class="primary" id="pair-browser">Создать код подключения</button><button id="download-extension">Скачать расширение</button></div><div id="pairing" hidden><span class="field-label">КОД ПОДКЛЮЧЕНИЯ</span><div class="pair-code-row"><strong id="pair-code"></strong><button id="copy-code" class="icon-button" aria-label="Скопировать код подключения"><svg><use href="#copy-icon"/></svg></button></div><p class="footnote" id="pair-expiry"></p></div><button id="revoke" class="text-button danger" hidden>Отключить все браузеры</button></div>
+      </section>
+      <section id="page-appearance" class="page" aria-labelledby="appearance-title" hidden>
+        <div class="page-heading"><div><p class="eyebrow">ПЕРСОНАЛИЗАЦИЯ</p><h2 id="appearance-title">Внешний вид</h2><p>Ваш цвет, размер и характер свечения.</p></div></div>
+        <h3 class="section-title first-title">Цвет интерфейса</h3>
+        <div class="card palette-card"><div id="color-wheel" class="color-wheel" role="slider" tabindex="0" aria-label="Цветовой круг: влево и вправо — оттенок, вверх и вниз — насыщенность" aria-valuemin="0" aria-valuemax="359"><span id="wheel-marker"></span></div><div class="palette-controls"><label class="field-label" for="color-hex">ЦВЕТ HEX</label><input id="color-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off"><div id="color-presets" class="color-presets" aria-label="Готовые цвета"></div><label class="field-label brightness-label" for="brightness">ЯРКОСТЬ <output id="brightness-value">100%</output></label><input id="brightness" type="range" min="0" max="100" value="100" aria-label="Яркость цвета"><div class="button-row"><button id="color-save" class="primary">Применить цвет</button><button id="color-cancel">Сбросить изменения</button></div><p id="color-status" class="footnote" role="status"></p></div></div>
+        <h3 class="section-title">Карточка виджета</h3><div class="card settings-list"><label class="setting-row range-row"><span><strong>Непрозрачность оформления</strong><small>Кнопки, название и шкала остаются чёткими</small></span><output id="opacity-value">100%</output><input id="opacity" type="range" min="25" max="100" step="1" value="100" aria-label="Непрозрачность оформления"></label><label class="setting-row range-row"><span><strong>Масштаб</strong><small>Размер виджета на экране</small></span><output id="scale-value">100%</output><input id="scale" type="range" min="50" max="175" step="5" value="100" aria-label="Масштаб виджета"></label></div>
+        <h3 class="section-title">Волна и свечение</h3><div class="card settings-list"><label class="setting-row"><span><strong>Режим анимации</strong><small>Непрерывный контур снаружи виджета</small></span><select id="wave-mode" aria-label="Режим волны"><option value="audio">В такт звуку Windows</option><option value="ambient">Плавная волна</option><option value="off">Выключена</option></select></label><label class="setting-row range-row"><span><strong>Интенсивность</strong></span><output id="wave-intensity-value">70%</output><input id="wave-intensity" type="range" min="0" max="100" step="1" value="70" aria-label="Интенсивность волны"></label><label class="setting-row"><span><strong>Экономичный режим</strong><small>12 кадров/с вместо 30</small></span><input id="wave-economy" class="switch" type="checkbox"></label></div><p class="footnote" id="wave-note">Реакция на весь звук устройства вывода Windows. Микрофон не используется.</p>
+      </section>
+      <section id="page-shortcuts" class="page" aria-labelledby="shortcuts-title" hidden>
+        <div class="page-heading"><div><p class="eyebrow">УДОБНОЕ УПРАВЛЕНИЕ</p><h2 id="shortcuts-title">Горячие клавиши</h2><p>Работают в игре и при закреплённом виджете.</p></div></div>
+        <div class="card settings-list" id="shortcut-list"></div><p id="shortcut-status" class="footnote" role="status">Выберите действие и нажмите своё сочетание.</p><div class="button-row shortcut-actions"><button id="shortcut-defaults">По умолчанию</button><button id="shortcut-cancel">Отменить изменения</button><button id="shortcut-save" class="primary">Сохранить</button></div><p class="footnote">Можно назначить обычные клавиши или сочетания с Ctrl, Alt, Shift, Win. NumPad не нужен. При записи бинды приостановлены; Esc отменяет запись.</p>
+      </section>
+      <section id="page-updates" class="page" aria-labelledby="updates-title" hidden>
+        <div class="page-heading"><div><p class="eyebrow">ПРИЛОЖЕНИЕ</p><h2 id="updates-title">Обновления</h2><p>Новые возможности с сохранением настроек.</p></div></div>
+        <div class="card update-card"><img src="../assets/liberty-wave.png" alt="" width="72" height="72"><h3>Liberty Wave</h3><p id="installed-version"></p><p id="update-status" role="status"></p><progress id="update-progress" max="1" value="0" aria-label="Скачивание обновления" hidden></progress><div class="button-row"><button id="update-check" class="primary">Проверить обновления</button><button id="update-download" class="primary" hidden>Скачать обновление</button><button id="update-install" class="primary" hidden>Установить и перезапустить</button><button id="update-cancel" hidden>Отменить загрузку</button></div><p id="update-detail" class="footnote"></p></div><div class="card update-info"><strong>Всё останется на месте</strong><p>Цвет, размер, горячие клавиши и подключения браузеров сохранятся. Во время обновления музыкальный плеер продолжит работать.</p></div>
+      </section>
+    </main>
+  </div>
+  <script src="../shared/theme.js"></script><script src="../shared/shortcuts.js"></script><script src="../renderer/playback-clock.js"></script><script src="theme.js"></script><script src="shortcuts.js"></script><script src="renderer.js"></script>
+</body>
+</html>

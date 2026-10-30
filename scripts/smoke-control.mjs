@@ -1,0 +1,116 @@
+import { _electron, chromium } from 'playwright';
+import { createRequire } from 'node:module';
+import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
+import assert from 'node:assert/strict';
+const require = createRequire(import.meta.url), root = resolve(import.meta.dirname, '..');
+const profile = await mkdtemp(join(tmpdir(), 'liberty-control-'));
+let app, browser;
+async function waitState(panel, predicate) {
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline) { const state = await panel.evaluate(() => libertyControl.getState()); if (predicate(state)) return state; await new Promise(resolve => setTimeout(resolve, 50)); }
+  throw new Error('Control state did not reach expected value');
+}
+async function launch(demo = true) {
+  app = await _electron.launch({ executablePath: require('electron'), args: [root, ...(demo ? ['--demo', '--widget-only'] : []), '--disable-gpu', `--user-data-dir=${profile}`] });
+  const widget = await app.firstWindow(); await widget.waitForFunction(() => !!window.musicWidget);
+  if (demo) await widget.evaluate(() => musicWidget.openControls('home'));
+  let panel;
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) { panel = app.windows().find(page => page.url().endsWith('/control/index.html')); if (panel) break; await new Promise(resolve => setTimeout(resolve, 50)); }
+  assert.ok(panel, 'Desktop control window must open');
+  await panel.waitForFunction(() => !!window.libertyControl); return { widget, panel };
+}
+try {
+  let { widget, panel } = await launch();
+  const errors = []; panel.on('pageerror', error => errors.push(error.message));
+  await waitState(panel, s => s.connected);
+  assert.equal(await panel.title(), 'Liberty Wave'); assert.equal(await panel.locator('h1').textContent(), 'Liberty Wave');
+  assert.equal(await panel.evaluate(() => typeof require), 'undefined'); assert.equal(await widget.evaluate(() => typeof window.libertyControl), 'undefined');
+  await panel.locator('#interaction').uncheck(); await waitState(panel, s => !s.interaction);
+  assert.equal((await widget.evaluate(() => musicWidget.command('next'))).ok, false);
+  const title = (await panel.evaluate(() => libertyControl.getState())).title;
+  await panel.locator('#next').click(); await waitState(panel, s => s.title !== title && !s.interaction);
+  await panel.locator('#previous').click(); await waitState(panel, s => s.title === title && !s.interaction);
+  await panel.locator('#volume').evaluate(el => { el.value = 32; el.dispatchEvent(new Event('input')); el.dispatchEvent(new Event('change')); });
+  await waitState(panel, s => s.volume === .32 && !s.interaction);
+  await panel.locator('#mute').click(); await waitState(panel, s => s.muted && !s.interaction);
+  await panel.locator('#mute').click(); await waitState(panel, s => !s.muted);
+  await panel.locator('#compact').check(); await waitState(panel, s => s.compact && !s.interaction);
+  const compactBounds = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.webContents.getURL().endsWith('/renderer/index.html')).getBounds());
+  await panel.locator('[data-page="sources"]').click();
+  await panel.locator('#source').selectOption('demo:web-vk'); await waitState(panel, s => s.source.provider === 'vk');
+  await panel.locator('#pair-browser').click(); const paired = await waitState(panel, s => !!s.pairing?.code);
+  assert.match(paired.pairing.code, /^[A-F0-9]{8}$/); assert.equal(paired.interaction, false);
+  assert.deepEqual(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.webContents.getURL().endsWith('/renderer/index.html')).getBounds()), compactBounds, 'Pairing in the desktop app must not expand the overlay');
+  await panel.locator('#copy-code').click(); assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), paired.pairing.code);
+  await app.evaluate(({ shell }) => { globalThis.libertyOpenedURLs = []; shell.openExternal = async url => globalThis.libertyOpenedURLs.push(url); });
+  await panel.getByRole('button', { name: 'Открыть Spotify в приложении', exact: true }).click();
+  assert.deepEqual(await app.evaluate(() => globalThis.libertyOpenedURLs), ['spotify:']);
+  assert.equal((await panel.evaluate(() => libertyControl.action('openMusic', { provider: 'javascript:alert(1)', nativeApp: false }))).ok, false);
+  assert.equal((await panel.evaluate(() => libertyControl.action('__proto__'))).ok, false);
+  await panel.keyboard.press('Escape');
+  await panel.locator('[data-page="appearance"]').click();
+  await panel.locator('[data-color="#438bff"]').click();
+  assert.equal((await panel.evaluate(() => libertyControl.getState())).preferences.color, '#ff3045');
+  await panel.locator('#color-hex').fill('#oops'); assert.equal(await panel.locator('#color-save').isDisabled(), true);
+  await panel.locator('#color-cancel').click();
+  await panel.locator('[data-color="#438bff"]').click(); await panel.locator('#color-save').click();
+  await waitState(panel, s => s.preferences.color === '#438bff');
+  assert.equal(await widget.locator('#play-pause').evaluate(el => getComputedStyle(el).color), 'rgb(67, 139, 255)');
+  await panel.locator('#opacity').evaluate(el => { el.value = 25; el.dispatchEvent(new Event('input')); el.dispatchEvent(new Event('change')); });
+  await waitState(panel, s => s.preferences.opacity === .25);
+  await panel.locator('#wave-mode').selectOption('ambient'); await panel.locator('#wave-economy').check();
+  await waitState(panel, s => s.preferences.waveMode === 'ambient' && s.preferences.waveEconomy);
+  await mkdir(join(root, 'artifacts'), { recursive: true });
+  await panel.screenshot({ path: join(root, 'artifacts/control-appearance.png') });
+  await panel.locator('[data-page="shortcuts"]').click();
+  await panel.locator('#bind-toggleInteraction').click(); await panel.keyboard.press('F8');
+  await panel.locator('#bind-playPause').click(); await panel.keyboard.press('F8');
+  await panel.locator('#shortcut-save').click(); await panel.waitForFunction(() => document.getElementById('shortcut-status').textContent.includes('разные'));
+  await panel.locator('#bind-playPause').click(); await panel.keyboard.press('F9');
+  await panel.locator('#shortcut-save').click(); await waitState(panel, s => s.shortcuts.bindings.toggleInteraction === 'F8' && !s.controlCapture);
+  await panel.locator('#bind-next').click(); await panel.keyboard.press('F10');
+  browser = await chromium.launch({ channel: 'chromium', headless: false });
+  const other = await browser.newPage(); await other.setContent('<h1>Another app</h1>'); await other.bringToFront();
+  await waitState(panel, s => !s.controlCapture);
+  assert.equal(await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('F8') && globalShortcut.isRegistered('F9')), true, 'Leaving capture must restore working global keys');
+  await browser.close(); browser = null;
+  await panel.bringToFront(); await panel.locator('#shortcut-cancel').click();
+  assert.equal((await panel.evaluate(() => libertyControl.getState())).shortcuts.bindings.next, '');
+  const bytes = Buffer.alloc(256); bytes.write('MZ'); bytes.writeUInt32LE(128, 60); bytes.set([80, 69, 0, 0], 128);
+  await app.evaluate(({ protocol }, fixture) => {
+    const base = 'https://github.com/dyushaboldyusha-a11y/music-adapter/releases/download/v0.6.0/', name = 'Liberty-Wave-0.6.0-Windows.exe';
+    protocol.handle('https', request => {
+      if (request.url.includes('/releases/latest')) return new Response(JSON.stringify({ tag_name: 'v0.6.0', assets: [name, 'SHA256SUMS.txt'].map(name => ({ name, state: 'uploaded', size: name.endsWith('.exe') ? fixture.bytes.length : 128, browser_download_url: base + name })) }));
+      if (request.url.endsWith('SHA256SUMS.txt')) return new Response(fixture.hash + '  ' + name + '\n');
+      if (request.url === base + name) return new Response(new Uint8Array(fixture.bytes));
+      return new Response('not found', { status: 404 });
+    });
+  }, { bytes: [...bytes], hash: createHash('sha256').update(bytes).digest('hex') });
+  await panel.locator('[data-page="updates"]').click(); await panel.locator('#update-check').click(); await waitState(panel, s => s.updates.phase === 'available');
+  await panel.locator('#update-download').click(); await waitState(panel, s => s.updates.phase === 'ready');
+  assert.equal(await panel.locator('#update-install').isDisabled(), true);
+  await panel.locator('[data-page="home"]').click();
+  await panel.screenshot({ path: join(root, 'artifacts/control-home.png') });
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.webContents.getURL().endsWith('/control/index.html')).setSize(760, 540));
+  await panel.waitForFunction(() => innerWidth === 760);
+  assert.equal(await panel.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'Desktop UI must fit a small window');
+  assert.equal(await panel.getByRole('button', { name: 'Горячие клавиши', exact: true }).isVisible(), true, 'Icon navigation must retain accessible labels');
+  await panel.locator('#window-close').click();
+  assert.equal(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.webContents.getURL().endsWith('/control/index.html')).isVisible()), false);
+  assert.equal((await widget.evaluate(() => musicWidget.getState())).connected, true);
+  await app.evaluate(({ app }) => app.emit('second-instance'));
+  await waitState(panel, s => !s.interaction); await panel.waitForFunction(() => document.visibilityState === 'visible');
+  assert.equal((await panel.evaluate(() => libertyControl.action('preferences', { scale: 'big' }))).ok, false);
+  assert.equal(errors.length, 0, errors.join('\n'));
+  await app.close(); app = null;
+  const saved = JSON.parse(await readFile(join(profile, 'widget.json'), 'utf8'));
+  assert.equal(saved.color, '#438bff'); assert.equal(saved.opacity, .25); assert.equal(saved.compact, true); assert.equal(saved.shortcuts.toggleInteraction, 'F8'); assert.ok(saved.controlBounds.width >= 760);
+  ({ widget, panel } = await launch(false));
+  const restored = await waitState(panel, s => s.preferences.color === '#438bff');
+  assert.equal(restored.interaction, false); assert.equal(restored.preferences.compact, true); assert.equal(restored.shortcuts.bindings.toggleInteraction, 'F8');
+  console.log('PASS: standalone Liberty Wave desktop app, title, isolated IPC, locked overlay controls, sources/pairing, palette, preferences, hotkey capture/blur recovery, verified updater, close-to-tray, reopening, normal startup and profile persistence.');
+} finally { await browser?.close(); await app?.close(); await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }

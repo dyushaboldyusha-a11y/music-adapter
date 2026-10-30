@@ -16,7 +16,7 @@
     <symbol id="i-previous" viewBox="0 0 24 24"><path d="m19 5-11 7 11 7Z" fill="currentColor" stroke="none"/><path d="M6 5v14" stroke-width="2.8"/></symbol>
     <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M3 6h2c6 0 8 12 14 12h2m-4-4 4 4-4 4M3 18h2c2.2 0 4-1.8 5.5-4.2M14 8.2C15.6 6.7 17.2 6 19 6h2m-4-4 4 4-4 4"/></symbol>
     <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m16 2 4 4-4 4M4 11V9a3 3 0 0 1 3-3h13M8 22l-4-4 4-4m12-1v2a3 3 0 0 1-3 3H4"/></symbol>
-    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="4" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="20" cy="12" r="1.7" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="4"/><path d="M3 9h18M9 9v11"/></symbol>
     <symbol id="i-volume" viewBox="0 0 24 24"><path d="M11 4 5 9H2v6h3l6 5ZM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
     <symbol id="i-muted" viewBox="0 0 24 24"><path d="M11 4 5 9H2v6h3l6 5Zm5 5 6 6m0-6-6 6"/></symbol>
     <symbol id="i-compact" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 12h10"/></symbol>
@@ -54,8 +54,7 @@
           <h1 id="title">Liberty Wave</h1>
           <p id="artist">Включите музыку в любом плеере</p>
         </div>
-        <button class="icon-button layout-toggle" id="compact-toggle" aria-label="Компактный режим" title="Компактный режим"><svg><use id="compact-icon" href="#i-compact"/></svg></button>
-        <button class="icon-button more" id="menu" aria-label="Настройки виджета" title="Настройки"><svg><use href="#i-more"/></svg></button>
+        <button class="icon-button more" id="menu" aria-label="Открыть Liberty Wave" title="Открыть Liberty Wave"><svg><use href="#i-more"/></svg></button>
       </div>
       <div class="timeline">
         <input type="range" id="seek" min="0" max="1" step="0.1" value="0" aria-label="Позиция воспроизведения" disabled>
@@ -70,73 +69,16 @@
       </div>
       <div class="volume-row" id="volume-controls" hidden><button class="icon-button" id="mute" aria-label="Выключить звук" aria-pressed="false"><svg><use id="volume-icon" href="#i-volume"/></svg></button><input id="volume" type="range" min="0" max="100" step="1" value="65" aria-label="Громкость выбранного плеера"><output id="volume-value" for="volume">65%</output></div>
     </section>
-    <section id="pairing" class="pairing-panel" role="dialog" aria-label="Подключить браузер" hidden>
-      <h2>Подключить браузер</h2><p>Установите расширение Liberty Wave и введите в нём этот код:</p>
-      <strong id="pair-code"></strong><p class="pair-expiry">Код действует 5 минут</p>
-      <div><button id="copy-code">Скопировать код</button><button id="close-pair">Закрыть</button></div>
-    </section>
-    <section id="shortcuts" class="settings-panel shortcuts-panel" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" hidden>
-      <h2 id="shortcuts-title">Горячие клавиши</h2>
-      <p class="settings-description">Работают во всех приложениях, в том числе при закреплённом виджете.</p>
-      <div class="shortcut-list">
-      <div class="shortcut-row"><span id="bind-toggle-label">Управление / закрепление</span><button class="shortcut-key" id="bind-toggleInteraction" aria-labelledby="bind-toggle-label" aria-pressed="false"></button><span></span></div>
-      <div class="shortcut-row"><span id="bind-play-label">Пауза / продолжить</span><button class="shortcut-key" id="bind-playPause" aria-labelledby="bind-play-label" aria-pressed="false"></button><button class="shortcut-clear" id="shortcut-clear-playPause" aria-label="Отключить бинд паузы" title="Отключить">×</button></div>
-      <div class="shortcut-row"><span id="bind-next-label">Следующий трек</span><button class="shortcut-key" id="bind-next" aria-labelledby="bind-next-label" aria-pressed="false"></button><button class="shortcut-clear" id="shortcut-clear-next" aria-label="Отключить бинд следующего трека" title="Отключить">×</button></div>
-      <div class="shortcut-row"><span id="bind-previous-label">Предыдущий трек</span><button class="shortcut-key" id="bind-previous" aria-labelledby="bind-previous-label" aria-pressed="false"></button><button class="shortcut-clear" id="shortcut-clear-previous" aria-label="Отключить бинд предыдущего трека" title="Отключить">×</button></div>
-      <div class="shortcut-row"><span id="bind-volumeUp-label">Увеличить громкость</span><button class="shortcut-key" id="bind-volumeUp" aria-labelledby="bind-volumeUp-label" aria-pressed="false"></button><button class="shortcut-clear" id="shortcut-clear-volumeUp" aria-label="Отключить: Увеличить громкость" title="Отключить">×</button></div>
-      <div class="shortcut-row"><span id="bind-volumeDown-label">Уменьшить громкость</span><button class="shortcut-key" id="bind-volumeDown" aria-labelledby="bind-volumeDown-label" aria-pressed="false"></button><button class="shortcut-clear" id="shortcut-clear-volumeDown" aria-label="Отключить: Уменьшить громкость" title="Отключить">×</button></div>
-      <div class="shortcut-row"><span id="bind-mute-label">Выключить / включить звук</span><button class="shortcut-key" id="bind-mute" aria-labelledby="bind-mute-label" aria-pressed="false"></button><button class="shortcut-clear" id="shortcut-clear-mute" aria-label="Отключить: Выключить / включить звук" title="Отключить">×</button></div>
-      <div class="shortcut-row"><span id="bind-toggleCompact-label">Компактный режим</span><button class="shortcut-key" id="bind-toggleCompact" aria-labelledby="bind-toggleCompact-label" aria-pressed="false"></button><button class="shortcut-clear" id="shortcut-clear-toggleCompact" aria-label="Отключить: Компактный режим" title="Отключить">×</button></div>
-      </div>
-      <p class="settings-status" id="shortcut-status" role="status" aria-live="polite"></p>
-      <div class="settings-actions"><button id="shortcut-defaults">По умолчанию</button><button id="shortcut-cancel">Отмена</button><button id="shortcut-save" class="primary-action">Сохранить</button></div>
-    </section>
-    <section id="wave" class="settings-panel wave-panel" role="dialog" aria-modal="true" aria-labelledby="wave-title" hidden>
-      <h2 id="wave-title">Волна и свечение</h2>
-      <label class="wave-setting">Анимация <select id="wave-mode" aria-label="Режим волны"><option value="audio">В такт звуку Windows</option><option value="ambient">Плавная волна</option><option value="off">Выключена</option></select></label>
-      <label class="wave-setting" for="wave-intensity">Интенсивность <output id="wave-intensity-value">70%</output></label><input id="wave-intensity" type="range" min="0" max="100" step="1" value="70" aria-label="Интенсивность волны">
-      <label class="wave-economy"><input id="wave-economy" type="checkbox"> Экономичный режим · 12 кадров/с</label>
-      <p class="settings-description" id="wave-source">Реакция на все звуки устройства вывода. Микрофон не используется.</p>
-      <div class="settings-actions"><button id="wave-close" class="primary-action">Готово</button></div>
-    </section>
-    <section id="updates" class="settings-panel updates-panel" role="dialog" aria-modal="true" aria-labelledby="updates-title" hidden>
-      <h2 id="updates-title">Обновления Liberty Wave</h2>
-      <p class="settings-description" id="installed-version"></p>
-      <p id="update-status" role="status" aria-live="polite"></p>
-      <progress id="update-progress" max="1" value="0" aria-label="Скачивание обновления" hidden></progress>
-      <p class="settings-description" id="update-detail"></p>
-      <div class="settings-actions"><button id="update-close">Закрыть</button><button id="update-cancel-download" hidden>Отменить загрузку</button><button id="update-check" class="primary-action">Проверить</button><button id="update-download" class="primary-action" hidden>Скачать</button><button id="update-install" class="primary-action" hidden>Установить и перезапустить</button></div>
-    </section>
-    <section id="theme" class="settings-panel theme-panel" role="dialog" aria-modal="true" aria-labelledby="theme-title" hidden>
-      <h2 id="theme-title">Цвет интерфейса</h2>
-      <div class="theme-body">
-        <div id="color-wheel" class="color-wheel" role="slider" tabindex="0" aria-label="Цветовой круг: влево и вправо — оттенок, вверх и вниз — насыщенность" aria-valuemin="0" aria-valuemax="359" aria-valuenow="354"><span id="wheel-marker" class="wheel-marker"></span></div>
-        <div class="theme-controls">
-          <div class="theme-values"><label for="theme-hex">HEX <input id="theme-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Цвет HEX"></label><label for="theme-brightness">Яркость <output id="theme-brightness-value">100%</output></label></div>
-          <input type="range" id="theme-brightness" min="0" max="100" step="1" value="100" aria-label="Яркость цвета">
-          <div class="theme-presets" aria-label="Готовые цвета">
-            <button data-color="#ff3045" style="--swatch:#ff3045" aria-label="Красный"></button><button data-color="#ff9f30" style="--swatch:#ff9f30" aria-label="Оранжевый"></button><button data-color="#22c55e" style="--swatch:#22c55e" aria-label="Зелёный"></button><button data-color="#22d3ee" style="--swatch:#22d3ee" aria-label="Голубой"></button><button data-color="#438bff" style="--swatch:#438bff" aria-label="Синий"></button><button data-color="#a855f7" style="--swatch:#a855f7" aria-label="Фиолетовый"></button><button data-color="#ec4899" style="--swatch:#ec4899" aria-label="Розовый"></button><button data-color="#d4d4d8" style="--swatch:#d4d4d8" aria-label="Серый"></button>
-          </div>
-          <p class="settings-status" id="theme-status" role="status" aria-live="polite"></p>
-          <div class="settings-actions"><button id="theme-default">Сбросить</button><button id="theme-cancel">Отмена</button><button id="theme-save" class="primary-action">Сохранить</button></div>
-        </div>
-      </div>
-    </section>
   </main>
   <footer class="widget-footer">
-    <label class="source-picker"><span class="source-dot" aria-hidden="true"></span><select id="source" aria-label="Источник музыки"><option value="auto">Автоматически</option></select></label>
-    <button id="pair-browser" class="pair-button" aria-label="Подключить браузер" title="Подключить браузер">＋</button>
+    <span class="source-status"><span class="source-dot" aria-hidden="true"></span><span id="source-name">Ожидание плеера</span></span>
     <span class="demo-label" id="demo-label" hidden>ДЕМО</span>
     <span class="mode-hint" id="mode-hint"><svg><use href="#i-move"/></svg><span id="mode-text">Перетащите за обложку или название</span><kbd id="interaction-key">Ctrl+Shift+8</kbd><span id="key-hint">закрепить</span></span>
   </footer>
   <script src="playback-clock.js"></script>
   <script src="../shared/shortcuts.js"></script>
   <script src="../shared/theme.js"></script>
-  <script src="shortcut-settings.js"></script>
-  <script src="theme-settings.js"></script>
-  <script src="update-settings.js"></script>
   <script src="audio-wave.js"></script>
-  <script src="wave-settings.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

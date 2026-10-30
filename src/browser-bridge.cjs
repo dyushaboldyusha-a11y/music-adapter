@@ -51,7 +51,7 @@ class BrowserBridge extends EventEmitter {
         if (this.failedPairings.length >= 5) return send(429, { error: 'Повторите через минуту' });
         if (!this.pairing || this.pairing.expiresAt < Date.now() || String(body.code).toUpperCase() !== this.pairing.code || !/^[\w-]{8,80}$/.test(body.clientId || '')) { this.failedPairings.push(Date.now()); return send(401, { error: 'Неверный или просроченный код' }); }
         const token = crypto.randomBytes(32).toString('base64url');
-        if (this.clients.size >= 8 && !this.clients.has(body.clientId)) return send(409, { error: 'Отключите старые браузеры в меню виджета' });
+        if (this.clients.size >= 8 && !this.clients.has(body.clientId)) return send(409, { error: 'Отключите старые браузеры в разделе «Источники» Liberty Wave' });
         this.clients.set(body.clientId, { id: body.clientId, hash: hash(token), name: String(body.browser || 'Browser').slice(0, 40), queue: [] });
         this.pairing = null; this.persist();
         return send(200, { token });
