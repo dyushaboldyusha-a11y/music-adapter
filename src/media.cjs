@@ -1,6 +1,7 @@
 const { EventEmitter } = require('node:events');
 const { spawn } = require('node:child_process');
 const { createInterface } = require('node:readline');
+const { descriptor } = require('./sources.cjs');
 
 const COMMANDS = new Set(['playPause', 'next', 'previous', 'seek', 'shuffle', 'repeat']);
 const EMPTY_STATE = Object.freeze({ connected: false, title: '', artist: '', album: '', artwork: null, playing: false, position: 0, duration: 0, shuffle: false, repeat: 'none', capabilities: {}, error: null });
@@ -15,7 +16,7 @@ function validateCommand(command, value) {
 function normalizeState(input = {}) {
   const numeric = value => Number.isFinite(value) && value >= 0 ? value : 0;
   const artwork = typeof input.artwork === 'string' && /^data:image\/(png|jpe?g|webp|gif|bmp);base64,[A-Za-z0-9+/=]+$/i.test(input.artwork) && input.artwork.length < 12_000_000 ? input.artwork : null;
-  return { ...EMPTY_STATE, connected: input.connected === true, title: String(input.title || '').slice(0, 500), artist: String(input.artist || '').slice(0, 500), album: String(input.album || '').slice(0, 500), artwork, playing: input.playing === true, position: Math.min(numeric(input.position), numeric(input.duration)), duration: numeric(input.duration), shuffle: input.shuffle === true, repeat: ['none', 'track', 'list'].includes(input.repeat) ? input.repeat : 'none', capabilities: Object.fromEntries([...COMMANDS].map(key => [key, input.capabilities?.[key] === true])), error: input.error ? String(input.error).slice(0, 500) : null };
+  return { ...EMPTY_STATE, connected: input.connected === true, title: String(input.title || '').slice(0, 500), artist: String(input.artist || '').slice(0, 500), album: String(input.album || '').slice(0, 500), artwork, playing: input.playing === true, live: input.live === true, position: Math.min(numeric(input.position), numeric(input.duration)), duration: numeric(input.duration), shuffle: input.shuffle === true, repeat: ['none', 'track', 'list'].includes(input.repeat) ? input.repeat : 'none', capabilities: Object.fromEntries([...COMMANDS].map(key => [key, input.capabilities?.[key] === true])), source: descriptor(input.source), sources: Array.isArray(input.sources) ? input.sources.map(descriptor).filter(Boolean).slice(0, 30) : [], error: input.error ? String(input.error).slice(0, 500) : null };
 }
 
 class WindowsMedia extends EventEmitter {
@@ -40,7 +41,7 @@ class WindowsMedia extends EventEmitter {
     let ended = false;
     const onEnd = () => {
       if (ended) return; ended = true;
-      for (const item of this.pending.values()) { clearTimeout(item.timer); item.reject(new Error('Соединение с Яндекс Музыкой прервано')); }
+      for (const item of this.pending.values()) { clearTimeout(item.timer); item.reject(new Error('Соединение с плеером прервано')); }
       this.pending.clear();
       if (!this.stopped) {
         console.error('Windows media bridge:', diagnostic || 'exited');
@@ -50,14 +51,18 @@ class WindowsMedia extends EventEmitter {
     };
     this.child.on('error', onEnd); this.child.on('exit', onEnd);
   }
-  command(command, value) {
+  command(command, value, sourceId) {
     validateCommand(command, value);
-    if (!this.child || this.child.exitCode !== null || !this.child.stdin.writable) return Promise.reject(new Error('Нет подключения к Яндекс Музыке'));
+    return this.request(command, value, sourceId);
+  }
+  selectSource(id) { return this.request('selectSource', id); }
+  request(command, value, sourceId) {
+    if (!this.child || this.child.exitCode !== null || !this.child.stdin.writable) return Promise.reject(new Error('Нет подключения к плееру'));
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('Яндекс Музыка не ответила на команду')); }, 6000);
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('Плеер не ответил на команду')); }, 6000);
       this.pending.set(id, { resolve, reject, timer });
-      this.child.stdin.write(JSON.stringify({ id, command, value }) + '\n');
+      this.child.stdin.write(JSON.stringify({ id, command, value, sourceId }) + '\n');
     });
   }
   stop() { this.stopped = true; clearTimeout(this.retry); this.lines?.close(); this.child?.stdin.end(); this.child?.kill(); for (const item of this.pending.values()) { clearTimeout(item.timer); item.reject(new Error('Приложение закрыто')); } this.pending.clear(); }
@@ -67,8 +72,10 @@ class DemoMedia extends EventEmitter {
   constructor() {
     super();
     this.index = 0;
-    this.state = { ...EMPTY_STATE, connected: true, title: 'After Dark', artist: 'Mr.Kitty', album: 'Time', playing: true, position: 84, duration: 258, capabilities: { playPause: true, next: true, previous: true, seek: true, shuffle: true, repeat: true }, demo: true };
+    this.sources = [descriptor({ id: 'demo:yandex', provider: 'yandex', kind: 'app' }), descriptor({ id: 'demo:spotify', provider: 'spotify', kind: 'app' }), ...['yandex', 'spotify', 'soundcloud', 'youtube', 'vk'].map(provider => descriptor({ id: `demo:web-${provider}`, provider, kind: 'browser', browser: 'Chrome' }))];
+    this.state = { ...EMPTY_STATE, connected: true, title: 'After Dark', artist: 'Mr.Kitty', album: 'Time', playing: true, position: 84, duration: 258, capabilities: { playPause: true, next: true, previous: true, seek: true, shuffle: true, repeat: true }, demo: true, source: this.sources[0], sources: this.sources, selection: 'auto' };
   }
+  async selectSource(id) { const source = id === 'auto' ? this.sources[0] : this.sources.find(s => s.id === id); if (!source) throw new Error('Источник недоступен'); this.state.source = source; this.state.selection = id; this.state.capabilities = { ...this.state.capabilities, shuffle: source.kind === 'app', repeat: source.kind === 'app' }; this.emit('state', { ...this.state }); }
   start() { this.emit('state', { ...this.state }); this.timer = setInterval(() => { if (this.state.playing) this.state.position = Math.min(this.state.duration, this.state.position + 1); this.emit('state', { ...this.state }); }, 1000); }
   async command(command, value) {
     validateCommand(command, value);

@@ -1,5 +1,17 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../native/windows-media.ps1') -InitializeOnly
+foreach ($case in @(
+    @('YandexMusic.exe', 'yandex', 'app'), @('SpotifyAB.SpotifyMusic!Spotify', 'spotify', 'app'),
+    @('SoundCloud.exe', 'soundcloud', 'app'), @('chrome.exe', 'browser', 'browser'),
+    @('msedge.exe', 'browser', 'browser'), @('firefox.exe', 'browser', 'browser'),
+    @('YandexBrowser.exe', 'browser', 'browser')
+)) {
+    $source = Get-SourceDescriptor $case[0]
+    if ($source.provider -ne $case[1] -or $source.kind -ne $case[2]) { throw ('Incorrect source classification: ' + $case[0]) }
+}
+if ($null -ne (Get-SourceDescriptor 'UnrelatedApplication.exe')) { throw 'An unrelated application must not become a music source.' }
+$managerIdentity = Get-SessionId $manager
+if ($managerIdentity -ne (Get-SessionId $manager)) { throw 'WinRT session identity must stay stable.' }
 $null = [Windows.Storage.StorageFile, Windows.Storage, ContentType=WindowsRuntime]
 $null = [Windows.Storage.Streams.RandomAccessStreamReference, Windows.Storage.Streams, ContentType=WindowsRuntime]
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString() + '.bin')

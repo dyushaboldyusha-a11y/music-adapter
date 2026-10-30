@@ -1,11 +1,14 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, Menu, Tray, nativeImage, screen, shell } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, Menu, Tray, nativeImage, screen, shell, clipboard } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { WindowsMedia, DemoMedia, EMPTY_STATE, validateCommand } = require('./media.cjs');
 const { preferences, layoutForDisplays } = require('./window-state.cjs');
 const { watchDisplays } = require('./display-placement.cjs');
+const { BrowserBridge } = require('./browser-bridge.cjs');
+const { MediaHub } = require('./media-hub.cjs');
+const { PROVIDERS, label: sourceLabel } = require('./sources.cjs');
 const demo = process.argv.includes('--demo');
-let window, tray, media, saveTimer, placement;
+let window, tray, media, saveTimer, placement, browserBridge;
 let effectiveScale = 1;
 let settings = {}, interaction = true, shortcutAvailable = false, state = { ...EMPTY_STATE };
 
@@ -16,11 +19,11 @@ else {
 }
 
 function publish() { if (window && !window.isDestroyed()) window.webContents.send('widget:state', snapshot()); }
-function snapshot() { return { ...state, interaction, shortcutAvailable, demo, preferences: { ...preferences(settings), scale: effectiveScale }, platform: process.platform }; }
+function snapshot() { return { ...state, interaction, shortcutAvailable, demo, browserAvailable: browserBridge?.available === true, preferences: { ...preferences(settings), scale: effectiveScale }, platform: process.platform }; }
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch (error) { console.error('Cannot save preferences', error.message); } }, 250); }
 function setInteraction(enabled) {
   interaction = enabled;
-  window.setIgnoreMouseEvents(!enabled, { forward: true });
+  window.setIgnoreMouseEvents(!enabled);
   window.setFocusable(enabled);
   if (enabled) { placement?.restore(); window.show(); window.focus(); }
   else window.blur();
@@ -36,11 +39,14 @@ function setPreferences(update) {
 function menu() {
   return Menu.buildFromTemplate([
     { label: interaction ? 'Закрепить · пропускать клики (Num8)' : 'Управлять и перемещать (Num8)', click: () => setInteraction(!interaction) },
-    { label: 'Открыть Яндекс Музыку', click: openMusic },
+    { label: 'Источник', submenu: [{ label: 'Автоматически', type: 'radio', checked: !state.selection || state.selection === 'auto', click: () => selectSource('auto') }, { type: 'separator' }, ...(state.sources || []).map(s => ({ label: sourceLabel(s) + (s.kind === 'browser' && s.title ? ' — ' + s.title.slice(0, 40) : ''), type: 'radio', checked: state.selection === s.id, click: () => selectSource(s.id) }))] },
+    { label: 'Подключить браузер', enabled: browserBridge?.available === true, click: showPairing },
+    { label: 'Отключить все браузеры', enabled: (browserBridge?.clients.size || 0) > 0, click: () => { browserBridge.revoke(); updateTray(); } },
+    { label: 'Открыть сервис', submenu: [{ label: 'Яндекс Музыка · приложение', click: () => openMusic('yandex', true) }, { label: 'Spotify · приложение', click: () => openMusic('spotify', true) }, { type: 'separator' }, ...[...PROVIDERS.values()].map(s => ({ label: `${s.name} · браузер`, click: () => openMusic(s.id) }))] },
     { type: 'separator' },
     { label: 'Непрозрачность оформления', submenu: [.25, .4, .5, .65, .85, 1].map(opacity => ({ label: `${Math.round(opacity * 100)}%`, type: 'radio', checked: preferences(settings).opacity === opacity, click: () => setPreferences({ opacity }) })) },
     { label: 'Масштаб · Ctrl + колесо', submenu: [.5, .65, .75, 1, 1.25, 1.5, 1.75].map(scale => ({ label: `${Math.round(scale * 100)}%`, type: 'radio', checked: Math.abs(preferences(settings).scale - scale) < .01, click: () => setPreferences({ scale }) })) },
-    { label: state.connected ? 'Яндекс Музыка подключена' : 'Ожидание Яндекс Музыки', enabled: false },
+    { label: state.connected ? sourceLabel(state.source) : 'Ожидание плеера', enabled: false },
     { label: 'Вернуть в угол экрана', click: () => placement.restore(true) },
     { label: 'Запускать с Windows', type: 'checkbox', visible: process.platform === 'win32' && app.isPackaged && !process.env.PORTABLE_EXECUTABLE_FILE, checked: process.platform === 'win32' && app.getLoginItemSettings().openAtLogin, click: item => app.setLoginItemSettings({ openAtLogin: item.checked }) },
     { type: 'separator' },
@@ -48,10 +54,14 @@ function menu() {
   ]);
 }
 function updateTray() { if (tray) { tray.setToolTip(`Music Adapter · ${interaction ? 'управление включено' : 'закреплён'} · Num8`); tray.setContextMenu(menu()); } }
-async function openMusic() {
-  if (process.platform !== 'win32') return { ok: false, error: 'Связь с приложением доступна в Windows 10/11.' };
-  try { await shell.openExternal('yandexmusic://'); return { ok: true }; }
-  catch { return { ok: false, error: 'Запустите установленное приложение Яндекс Музыки через меню «Пуск».' }; }
+async function selectSource(id) { try { if (typeof id !== 'string' || id.length > 200) throw new Error('Некорректный источник'); await media.selectSource(id); return { ok: true }; } catch (error) { return { ok: false, error: error.message }; } }
+function showPairing() { try { setInteraction(true); const pair = browserBridge.beginPairing(); window.webContents.send('widget:pairing', pair); return { ok: true, ...pair }; } catch (error) { return { ok: false, error: error.message }; } }
+async function openMusic(provider = state.source?.provider || 'yandex', nativeApp = false) {
+  const service = PROVIDERS.get(provider);
+  if (!service) return { ok: false, error: 'Выберите музыкальный сервис' };
+  const url = nativeApp && provider === 'yandex' ? 'yandexmusic://' : nativeApp && provider === 'spotify' ? 'spotify:' : service.url;
+  try { await shell.openExternal(url); return { ok: true }; }
+  catch { return { ok: false, error: 'Откройте плеер самостоятельно' }; }
 }
 function trayImage() {
   const pixels = Buffer.alloc(32 * 32 * 4);
@@ -79,6 +89,9 @@ async function start() {
   window.webContents.on('will-navigate', event => event.preventDefault());
   const authorized = event => event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame;
   ipcMain.handle('widget:get-state', event => authorized(event) ? snapshot() : null);
+  ipcMain.handle('widget:source', (event, id) => authorized(event) && interaction ? selectSource(id) : { ok: false });
+  ipcMain.handle('widget:pair', event => authorized(event) && interaction ? showPairing() : { ok: false });
+  ipcMain.handle('widget:copy-pair', event => { if (authorized(event) && interaction && browserBridge?.pairing?.expiresAt > Date.now()) clipboard.writeText(browserBridge.pairing.code); });
   ipcMain.handle('widget:preferences', (event, update) => {
     try { if (!authorized(event) || !interaction) throw new Error('Включите управление клавишей Num8'); setPreferences(update); return { ok: true, preferences: preferences(settings) }; }
     catch (error) { return { ok: false, error: error.message }; }
@@ -87,12 +100,12 @@ async function start() {
     try {
       if (!authorized(event) || !interaction) throw new Error('Включите управление клавишей Num8');
       validateCommand(command, value);
-      if (!state.connected || !state.capabilities?.[command]) throw new Error('Яндекс Музыка не предоставляет эту команду');
+      if (!state.connected || !state.capabilities?.[command]) throw new Error('Источник не предоставляет эту команду');
       await media.command(command, value); return { ok: true };
     } catch (error) { return { ok: false, error: error.message }; }
   });
-  ipcMain.handle('widget:open-music', event => authorized(event) ? openMusic() : { ok: false });
-  ipcMain.on('widget:menu', event => { if (authorized(event)) menu().popup({ window }); });
+  ipcMain.handle('widget:open-music', event => authorized(event) && interaction ? openMusic() : { ok: false });
+  ipcMain.on('widget:menu', event => { if (authorized(event) && interaction) menu().popup({ window }); });
   ipcMain.on('widget:toggle-interaction', event => { if (authorized(event)) setInteraction(!interaction); });
   tray = new Tray(trayImage());
   tray.on('click', () => setInteraction(!interaction));
@@ -104,11 +117,13 @@ async function start() {
   await window.loadFile(path.join(__dirname, 'renderer/index.html'));
   window.showInactive();
   setInteraction(interaction);
+  browserBridge = new BrowserBridge({ port: demo ? 0 : 16837, dataFile: path.join(app.getPath('userData'), 'browser-connections.json') });
+  try { await browserBridge.start(); } catch (error) { console.warn('Browser connector unavailable:', error.code); }
   if (demo) media = new DemoMedia();
-  else if (process.platform === 'win32') media = new WindowsMedia(app.isPackaged ? path.join(process.resourcesPath, 'native/windows-media.ps1') : path.join(__dirname, '../native/windows-media.ps1'));
-  else { state = { ...EMPTY_STATE, error: 'Прямая связь с приложением Яндекс Музыки поддерживается в Windows 10/11. Для просмотра интерфейса: npm run demo.' }; publish(); return; }
-  media.on('state', value => { const changed = value.connected !== state.connected; state = value; publish(); if (changed) updateTray(); });
+  else media = new MediaHub(process.platform === 'win32' ? new WindowsMedia(app.isPackaged ? path.join(process.resourcesPath, 'native/windows-media.ps1') : path.join(__dirname, '../native/windows-media.ps1')) : null, browserBridge);
+  media.on('state', value => { const changed = JSON.stringify([value.connected, value.selection, value.sources?.map(s => [s.id,s.title])]) !== JSON.stringify([state.connected, state.selection, state.sources?.map(s => [s.id,s.title])]); state = value; publish(); if (changed) updateTray(); });
   media.start();
+  updateTray();
 }
-app.on('before-quit', () => { placement?.dispose(); clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings.bounds = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } media?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
+app.on('before-quit', () => { placement?.dispose(); clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings.bounds = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } media?.stop(); browserBridge?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
 app.on('window-all-closed', () => app.quit());

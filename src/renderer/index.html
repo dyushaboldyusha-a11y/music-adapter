@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>Music Adapter · Яндекс Музыка</title>
+  <title>Liberty · Музыкальный виджет</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -19,7 +19,7 @@
     <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/></symbol>
     <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="5.5" cy="18.5" rx="3.5" ry="2.5"/><ellipse cx="16.5" cy="16.5" rx="3.5" ry="2.5"/></symbol>
   </svg>
-  <main class="widget" id="widget" aria-label="Виджет Яндекс Музыки">
+  <main class="widget" id="widget" aria-label="Музыкальный виджет Liberty">
     <div class="widget-surface" aria-hidden="true"></div>
     <svg class="edge-waves" viewBox="0 0 616 234" preserveAspectRatio="none" aria-hidden="true">
       <defs>
@@ -46,8 +46,8 @@
     <section class="player" aria-label="Воспроизведение">
       <div class="track-row">
         <div class="track-info">
-          <h1 id="title">Яндекс Музыка</h1>
-          <p id="artist">Подключение к приложению…</p>
+          <h1 id="title">Liberty</h1>
+          <p id="artist">Включите музыку в любом плеере</p>
         </div>
         <button class="icon-button more" id="menu" aria-label="Настройки виджета" title="Настройки"><svg><use href="#i-more"/></svg></button>
       </div>
@@ -63,9 +63,16 @@
         <button class="icon-button secondary" id="repeat" aria-label="Повтор" aria-pressed="false" disabled><svg><use href="#i-repeat"/></svg><span class="repeat-one" id="repeat-one" hidden>1</span></button>
       </div>
     </section>
+    <section id="pairing" class="pairing-panel" role="dialog" aria-label="Подключить браузер" hidden>
+      <h2>Подключить браузер</h2><p>Установите расширение Liberty и введите в нём этот код:</p>
+      <strong id="pair-code"></strong><p class="pair-expiry">Код действует 5 минут</p>
+      <div><button id="copy-code">Скопировать код</button><button id="close-pair">Закрыть</button></div>
+    </section>
   </main>
   <footer class="widget-footer">
-    <span class="demo-label" id="demo-label" hidden>ДЕМО · без подключения</span>
+    <label class="source-picker"><span class="source-dot" aria-hidden="true"></span><select id="source" aria-label="Источник музыки"><option value="auto">Автоматически</option></select></label>
+    <button id="pair-browser" class="pair-button" aria-label="Подключить браузер" title="Подключить браузер">＋</button>
+    <span class="demo-label" id="demo-label" hidden>ДЕМО</span>
     <span class="mode-hint" id="mode-hint"><svg><use href="#i-move"/></svg><span id="mode-text">Перетащите за обложку или название</span><kbd>Num 8</kbd><span id="key-hint">закрепить</span></span>
   </footer>
   <script src="renderer.js"></script>

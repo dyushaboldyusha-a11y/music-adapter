@@ -33,7 +33,7 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 h1 { margin: 0; font-size: 21px; font-weight: 500; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .15px; }
 .track-info p { margin: 3px 0 0; color: #968a8e; font-size: 14px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .icon-button { display: grid; place-items: center; padding: 0; width: 26px; height: 32px; border: 0; background: transparent; color: #e8e3e5; cursor: pointer; pointer-events: auto; transition: color .15s, opacity .15s, transform .15s; }
-.icon-button:hover:enabled { color: white; transform: scale(1.1); }
+body:not(.locked) .icon-button:hover:enabled { color: white; transform: scale(1.1); }
 .icon-button:disabled { cursor: default; opacity: .24; }
 .more { margin-top: 5px; color: #9d9095; }
 .more svg { width: 21px; }
@@ -41,7 +41,7 @@ h1 { margin: 0; font-size: 21px; font-weight: 500; line-height: 1.35; white-spac
 input[type="range"] { display: block; appearance: none; width: 100%; height: 16px; margin: 0; padding: 0; background: transparent; cursor: pointer; --progress: 0%; }
 input[type="range"]::-webkit-slider-runnable-track { height: 5px; border-radius: 8px; background: linear-gradient(to right, var(--red) 0%, var(--red) var(--progress), #38262b var(--progress), #38262b 100%); box-shadow: 0 0 1px rgba(255, 255, 255, .08); }
 input[type="range"]::-webkit-slider-thumb { appearance: none; width: 13px; height: 13px; margin-top: -4px; border-radius: 50%; background: var(--red); box-shadow: 0 0 10px rgba(255, 40, 62, .3); transition: transform .15s; }
-input[type="range"]:hover:enabled::-webkit-slider-thumb { transform: scale(1.18); }
+body:not(.locked) input[type="range"]:hover:enabled::-webkit-slider-thumb { transform: scale(1.18); }
 input[type="range"]:disabled { cursor: default; opacity: .4; }
 input[type="range"]:disabled::-webkit-slider-thumb { opacity: 0; }
 .times { display: flex; justify-content: space-between; margin-top: 3px; color: #9c8d93; font-size: 11px; line-height: 15px; font-variant-numeric: tabular-nums; }
@@ -57,8 +57,8 @@ input[type="range"]:disabled::-webkit-slider-thumb { opacity: 0; }
 .transport svg { width: 25px; height: 25px; }
 .play-button { display: grid; place-items: center; width: 60px; height: 60px; padding: 0; border: 1px solid #e62e42; border-radius: 50%; color: var(--red); background: radial-gradient(circle, #4d101c44, #1a080d44 75%); box-shadow: 0 0 18px #ed1d3210, inset 0 0 12px #d8283910; cursor: pointer; pointer-events: auto; transition: background .15s, transform .15s, box-shadow .15s; }
 .play-button svg { width: 31px; height: 31px; }
-.play-button:hover:enabled { transform: scale(1.04); background: #ff30451a; box-shadow: 0 0 22px #ed1d3225; }
-.play-button:active:enabled { transform: scale(.96); }
+body:not(.locked) .play-button:hover:enabled { transform: scale(1.04); background: #ff30451a; box-shadow: 0 0 22px #ed1d3225; }
+body:not(.locked) .play-button:active:enabled { transform: scale(.96); }
 .play-button:disabled { opacity: .35; cursor: default; }
 #repeat { position: relative; }
 .repeat-one { position: absolute; top: 10px; left: 11px; color: var(--red); background: #16090d; font-size: 9px; font-weight: 600; line-height: 11px; }
@@ -68,6 +68,29 @@ input[type="range"]:disabled::-webkit-slider-thumb { opacity: 0; }
 kbd { padding: 2px 4px; border: 1px solid #84424b55; border-radius: 4px; font-family: inherit; font-size: 9px; color: #e0a4ad; background: #1b0c11ce; }
 .demo-label { margin-right: auto; font-size: 8px; color: #a66a76; letter-spacing: .6px; }
 body.locked .widget-surface { border-color: rgba(233, 45, 61, .22); }
-body.locked .drag-surface, body.locked .track-info, body.locked .cover { -webkit-app-region: no-drag; cursor: default; }
+body.locked .drag-surface, body.locked .track-info, body.locked .cover, body.locked .artwork-column { -webkit-app-region: no-drag; cursor: default; }
 body.locked .mode-hint { opacity: .35; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+body.locked .widget, body.locked .widget-footer, body.locked .widget *, body.locked .widget-footer * { pointer-events: none !important; cursor: default !important; }
+.source-picker { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; -webkit-app-region: no-drag; }
+.source-dot { width: 5px; height: 5px; border-radius: 50%; background: #98616e; flex-shrink: 0; }
+body.connected .source-dot { background: #ff3045; box-shadow: 0 0 6px #ff304544; }
+#source { max-width: 270px; min-width: 100px; width: 100%; border: 1px solid #79324166; border-radius: 5px; padding: 3px 6px; background: #210e17c9; color: #d8a3b1; font: 10px "Segoe UI", sans-serif; cursor: pointer; text-overflow: ellipsis; outline-offset: 2px; }
+body:not(.locked) #source:hover { border-color: #cc3a53; }
+#source option { color: #f1d4dd; background: #24121a; }
+.mode-hint #mode-text { display: none; }
+.mode-hint { margin-left: auto; }
+.demo-label { margin: 0 2px; flex-shrink: 0; }
+.pair-button { width: 22px; height: 22px; flex-shrink: 0; border: 1px solid #71304088; border-radius: 5px; background: #250e19bb; color: #ee8fa3; cursor: pointer; -webkit-app-region: no-drag; }
+body:not(.locked) .pair-button:hover { background: #5d152a; }
+.pairing-panel { position: absolute; inset: 1px; z-index: 5; padding: 15px 28px; background: #1e0c16f5; border-radius: 18px; text-align: center; -webkit-app-region: no-drag; }
+.pairing-panel h2 { font-size: 17px; font-weight: 500; margin: 0 0 6px; }
+.pairing-panel p { font-size: 11px; color: #c598a8; margin: 5px 0; }
+#pair-code { display: block; font: 27px/1.4 "Consolas", monospace; letter-spacing: 5px; color: #ff4b64; }
+.pairing-panel .pair-expiry { font-size: 10px; }
+.pairing-panel button { margin: 5px; padding: 6px 12px; border: 1px solid #aa2e48; border-radius: 6px; background: #3c1122; color: #f4c5d1; font-size: 11px; cursor: pointer; }
+body:not(.locked) .pairing-panel button:hover { background: #721d37; }
+
+body.locked button, body.locked input, body.locked select { transition: none !important; }
+body.locked :focus-visible { outline: none; }

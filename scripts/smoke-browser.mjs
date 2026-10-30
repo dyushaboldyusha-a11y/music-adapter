@@ -1,0 +1,90 @@
+import { chromium, _electron } from 'playwright';
+import { createRequire } from 'node:module';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import assert from 'node:assert/strict';
+const require = createRequire(import.meta.url);
+const root = resolve(import.meta.dirname, '..');
+const { services } = require('../browser-extension/services.js');
+const appProfile = await mkdtemp(join(tmpdir(), 'liberty-app-'));
+const chromeProfile = await mkdtemp(join(tmpdir(), 'liberty-chrome-'));
+const extension = join(root, 'browser-extension');
+const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQ0AAAAASUVORK5CYII=';
+let app, browser;
+async function waitState(widget, predicate, timeout = 20000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) { const state = await widget.evaluate(() => musicWidget.getState()); if (predicate(state)) return state; await new Promise(resolve => setTimeout(resolve, 100)); }
+  throw new Error('Desktop player state did not reach the expected value.');
+}
+try {
+  app = await _electron.launch({ executablePath: require('electron'), args: [root, '--disable-gpu', `--user-data-dir=${appProfile}`], timeout: 30000 });
+  const widget = await app.firstWindow();
+  await widget.waitForFunction(() => !!window.musicWidget);
+  await waitState(widget, state => state.browserAvailable === true);
+  if (!(await widget.evaluate(() => musicWidget.getState())).interaction) await widget.evaluate(() => musicWidget.toggleInteraction());
+  await waitState(widget, state => state.interaction === true);
+  browser = await chromium.launchPersistentContext(chromeProfile, { channel: 'chromium', headless: false, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
+  const worker = browser.serviceWorkers()[0] || await browser.waitForEvent('serviceworker');
+  const extensionId = new URL(worker.url()).host;
+  const popup = await browser.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  const pair = await widget.evaluate(() => musicWidget.beginPairing());
+  assert.equal(pair.ok, true);
+  await popup.locator('#code').fill(pair.code);
+  await popup.locator('#pair button').click();
+  try { await popup.locator('#pair').waitFor({ state: 'hidden', timeout: 10000 }); }
+  catch { throw new Error('Extension pairing failed: ' + await popup.locator('#status').textContent()); }
+  await widget.locator('#close-pair').click();
+  const pages = [];
+  for (const service of services) {
+    const page = await browser.newPage();
+    const title = `Fixture ${service.id}`;
+    const html = `<!doctype html><html><body><h1>${title}</h1><script>
+      window.testActions=[];
+      const metadata=(suffix='')=>{navigator.mediaSession.metadata=new MediaMetadata({title:${JSON.stringify(title)}+suffix,artist:'Fixture Artist',artwork:[{src:${JSON.stringify(png)}}]});};
+      metadata();navigator.mediaSession.playbackState='playing';
+      navigator.mediaSession.setPositionState({duration:258,position:84});
+      navigator.mediaSession.setActionHandler('pause',()=>{window.testActions.push('pause');navigator.mediaSession.playbackState='paused';});
+      navigator.mediaSession.setActionHandler('play',()=>{window.testActions.push('play');navigator.mediaSession.playbackState='playing';});
+      navigator.mediaSession.setActionHandler('nexttrack',()=>{window.testActions.push('next');metadata(' next');});
+      navigator.mediaSession.setActionHandler('previoustrack',()=>{window.testActions.push('previous');metadata();});
+      navigator.mediaSession.setActionHandler('seekto',event=>{window.testActions.push('seek:'+event.seekTime);navigator.mediaSession.setPositionState({duration:258,position:event.seekTime});});
+    </script></body></html>`;
+    await page.route('**/*', route => route.fulfill({ status: 200, contentType: 'text/html', body: html }));
+    await page.goto(service.url);
+    pages.push(page);
+    const state = await waitState(widget, s => s.sources?.some(source => source.provider === service.id && source.id.startsWith('web:')));
+    const selected = state.sources.find(source => source.provider === service.id && source.id.startsWith('web:'));
+    const result = await widget.evaluate(id => musicWidget.selectSource(id), selected.id);
+    assert.equal(result.ok, true);
+    await widget.waitForFunction(expected => document.getElementById('title').textContent === expected, title);
+    await widget.waitForFunction(() => document.getElementById('artwork').naturalWidth === 1 && !document.getElementById('artwork').hidden);
+    await widget.locator('#play-pause').click();
+    await page.waitForFunction(() => window.testActions.includes('pause'), null, { timeout: 15000 });
+    await waitState(widget, s => !s.playing);
+    await widget.locator('#next').click();
+    await widget.waitForFunction(expected => document.getElementById('title').textContent === expected, title + ' next', { timeout: 15000 });
+    const seek = await widget.evaluate(() => musicWidget.command('seek', 42));
+    assert.equal(seek.ok, true);
+    await page.waitForFunction(() => window.testActions.includes('seek:42'));
+  }
+  const button = widget.locator('#play-pause');
+  const box = await button.boundingBox();
+  await widget.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await widget.evaluate(() => musicWidget.toggleInteraction());
+  await widget.waitForFunction(() => document.body.classList.contains('locked'));
+  await widget.mouse.move(1, 1); await widget.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await widget.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  const visual = await button.evaluate(el => ({ transform: getComputedStyle(el).transform, pointerEvents: getComputedStyle(el).pointerEvents, inert: el.closest('main').inert }));
+  assert.equal(visual.transform, 'none'); assert.equal(visual.pointerEvents, 'none'); assert.equal(visual.inert, true);
+  assert.equal((await widget.evaluate(() => musicWidget.selectSource('auto'))).ok, false);
+  await widget.evaluate(() => musicWidget.toggleInteraction());
+  await pages.at(-1).close();
+  await waitState(widget, s => !s.connected);
+  await widget.evaluate(() => musicWidget.selectSource('auto'));
+  await waitState(widget, s => s.connected);
+  console.log('PASS: actual Chromium MV3 extension ↔ Electron, pairing, all five service fixtures, cover transport, pause/next/seek, exact tab routing, closed tabs and inert pinned controls.');
+} finally {
+  await browser?.close(); await app?.close();
+  await rm(appProfile, { recursive: true, force: true }); await rm(chromeProfile, { recursive: true, force: true });
+}
