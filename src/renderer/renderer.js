@@ -32,9 +32,9 @@ function update(next) {
   $('widget').inert = !state.interaction;
   document.querySelector('.widget-footer').inert = !state.interaction;
   if (!state.interaction) { document.activeElement?.blur(); $('pairing').hidden = true; }
-  document.title = `Liberty${state.source ? ' · ' + sourceLabel(state.source) : ''}`;
-  $('widget').setAttribute('aria-label', state.source ? `Liberty · ${sourceLabel(state.source)}` : 'Музыкальный виджет Liberty');
-  $('title').textContent = state.connected ? state.title || 'Без названия' : state.source?.name || 'Liberty';
+  document.title = `Liberty Wave${state.source ? ' · ' + sourceLabel(state.source) : ''}`;
+  $('widget').setAttribute('aria-label', state.source ? `Liberty Wave · ${sourceLabel(state.source)}` : 'Музыкальный виджет Liberty Wave');
+  $('title').textContent = state.connected ? state.title || 'Без названия' : state.source?.name || 'Liberty Wave';
   $('artist').textContent = state.connected ? state.artist || 'Неизвестный исполнитель' : 'Ваша музыка — всегда рядом';
   $('title').title = state.interaction ? state.title || '' : '';
   $('artist').title = state.interaction ? state.artist || '' : '';

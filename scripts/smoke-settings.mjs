@@ -1,12 +1,13 @@
 import { _electron, chromium } from 'playwright';
 import { createRequire } from 'node:module';
-import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
 import { pressGlobalKeys } from './send-global-keys.mjs';
 const require = createRequire(import.meta.url), root = resolve(import.meta.dirname, '..');
 const profile = await mkdtemp(join(tmpdir(), 'liberty-settings-'));
+const legacyConfig = await mkdtemp(join(tmpdir(), 'liberty-legacy-profile-'));
 let app, browser;
 async function launch() {
   app = await _electron.launch({ executablePath: require('electron'), args: [root, '--demo', '--disable-gpu', `--user-data-dir=${profile}`] });
@@ -22,6 +23,9 @@ async function waitState(page, predicate) {
 }
 try {
   let page = await launch();
+  assert.equal(await app.evaluate(({ app }) => app.getName()), 'Liberty Wave');
+  assert.equal(await app.evaluate(({ app }) => app.getPath('userData')), profile);
+  assert.ok((await page.title()).startsWith('Liberty Wave'));
   assert.equal((await page.evaluate(() => musicWidget.getState())).shortcuts.bindings.toggleInteraction, 'Control+Shift+8');
   await page.evaluate(() => musicWidget.openShortcuts());
   await page.locator('#shortcuts').waitFor({ state: 'visible' });
@@ -96,8 +100,19 @@ try {
   const restored = await page.evaluate(() => musicWidget.getState());
   assert.deepEqual(restored.shortcuts.bindings, saved.shortcuts); assert.equal(restored.preferences.color, '#22c55e');
   assert.equal(await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('F8') && globalShortcut.isRegistered('F9')), true);
-  console.log('PASS: editable shortcuts, duplicate/busy-key rollback, capture cancellation, actual OS hotkeys with another app focused and widget pinned, wheel/brightness/HEX preview and cancel, theme and shortcut persistence across restart.');
+  if (process.platform === 'linux') {
+    await app.close(); app = null;
+    const previousProfile = join(legacyConfig, 'music-adapter');
+    await mkdir(previousProfile); await writeFile(join(previousProfile, 'widget.json'), JSON.stringify(saved));
+    app = await _electron.launch({ executablePath: require('electron'), args: [root, '--demo', '--disable-gpu'], env: { ...process.env, XDG_CONFIG_HOME: legacyConfig } });
+    page = await app.firstWindow(); await page.waitForFunction(() => !!window.musicWidget);
+    const legacy = await waitState(page, state => state.connected);
+    assert.equal(await app.evaluate(({ app }) => app.getPath('userData')), previousProfile);
+    assert.deepEqual(legacy.shortcuts.bindings, saved.shortcuts); assert.equal(legacy.preferences.color, saved.color);
+  }
+  console.log('PASS: editable shortcuts, busy-key rollback, global keys with another app focused, palette, restart persistence, Liberty Wave identity and preservation of the previous profile.');
 } finally {
   await browser?.close(); await app?.close();
   await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  await rm(legacyConfig, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }

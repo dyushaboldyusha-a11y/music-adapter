@@ -1,8 +1,9 @@
 {
-  "name": "music-adapter",
+  "name": "liberty-wave",
+  "productName": "Liberty Wave",
   "version": "0.4.0",
-  "description": "Liberty — музыкальный виджет для приложений и браузеров",
-  "author": "music-adapter",
+  "description": "Liberty Wave — музыкальный виджет для приложений и браузеров",
+  "author": "Liberty",
   "license": "MIT",
   "private": true,
   "main": "src/main.cjs",
@@ -14,17 +15,19 @@
     "test:settings": "node scripts/smoke-settings.mjs",
     "test:browser": "node scripts/smoke-browser.mjs",
     "check:windows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/check-windows.ps1",
+    "check:branding": "node scripts/check-branding.cjs",
     "dist:win": "electron-builder --win portable --x64",
     "pack:win": "electron-builder --win --dir --x64"
   },
   "devDependencies": {
     "electron": "45.1.0",
     "electron-builder": "26.18.0",
-    "playwright": "1.64.1"
+    "playwright": "1.64.1",
+    "resedit": "1.7.2"
   },
   "build": {
     "appId": "io.musicadapter.widget",
-    "productName": "Music Adapter",
+    "productName": "Liberty Wave",
     "asar": true,
     "directories": {
       "output": "release"
@@ -52,8 +55,9 @@
           ]
         }
       ],
-      "signAndEditExecutable": false,
-      "artifactName": "Music-Adapter-${version}-Windows.${ext}"
+      "icon": "build/icon.ico",
+      "signExecutable": false,
+      "artifactName": "Liberty-Wave-${version}-Windows.${ext}"
     }
   }
 }

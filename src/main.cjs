@@ -10,6 +10,16 @@ const { PROVIDERS, label: sourceLabel } = require('./sources.cjs');
 const { ShortcutManager } = require('./shortcuts.cjs');
 const { format: formatShortcut } = require('./shared/shortcuts.js');
 const { normalizeColor } = require('./shared/theme.js');
+const APP_NAME = 'Liberty Wave';
+const ICON_PATH = path.join(__dirname, 'assets/liberty-wave.png');
+// The display name can change without moving preferences or paired browsers.
+// Preserve explicit profiles used by tests and advanced launches as well.
+const profileOverride = app.commandLine.getSwitchValue('user-data-dir');
+const profilePath = profileOverride ? path.resolve(profileOverride) : path.join(app.getPath('appData'), 'music-adapter');
+fs.mkdirSync(profilePath, { recursive: true });
+app.setPath('userData', profilePath);
+app.setName(APP_NAME);
+if (process.platform === 'win32') app.setAppUserModelId('io.musicadapter.widget');
 const demo = process.argv.includes('--demo');
 let window, tray, media, saveTimer, placement, browserBridge, shortcuts;
 let effectiveScale = 1;
@@ -86,7 +96,7 @@ function menu() {
     { label: 'Закрыть виджет', click: () => app.quit() }
   ]);
 }
-function updateTray() { if (tray) { tray.setToolTip(`Music Adapter · ${interaction ? 'управление включено' : 'закреплён'} · ${interactionShortcut()}`); tray.setContextMenu(menu()); } }
+function updateTray() { if (tray) { tray.setToolTip(`${APP_NAME} · ${interaction ? 'управление включено' : 'закреплён'} · ${interactionShortcut()}`); tray.setContextMenu(menu()); } }
 async function selectSource(id) { try { if (typeof id !== 'string' || id.length > 200) throw new Error('Некорректный источник'); await media.selectSource(id); return { ok: true }; } catch (error) { return { ok: false, error: error.message }; } }
 function showPairing() { try { endEditor(); setInteraction(true); const pair = browserBridge.beginPairing(); window.webContents.send('widget:pairing', pair); return { ok: true, ...pair }; } catch (error) { return { ok: false, error: error.message }; } }
 async function openMusic(provider = state.source?.provider || 'yandex', nativeApp = false) {
@@ -97,13 +107,7 @@ async function openMusic(provider = state.source?.provider || 'yandex', nativeAp
   catch { return { ok: false, error: 'Откройте плеер самостоятельно' }; }
 }
 function trayImage() {
-  const pixels = Buffer.alloc(32 * 32 * 4);
-  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
-    const index = (y * 32 + x) * 4;
-    if ((x - 15.5) ** 2 + (y - 15.5) ** 2 < 225) { pixels[index] = 56; pixels[index + 1] = 43; pixels[index + 2] = 247; pixels[index + 3] = 255; }
-    if (((x >= 10 && x <= 13) || (x >= 18 && x <= 21)) && y >= 10 && y <= 21) { pixels[index] = 255; pixels[index + 1] = 255; pixels[index + 2] = 255; pixels[index + 3] = 255; }
-  }
-  return nativeImage.createFromBitmap(pixels, { width: 32, height: 32 });
+  return nativeImage.createFromPath(ICON_PATH).resize({ width: 32, height: 32, quality: 'best' });
 }
 async function start() {
   try { const saved = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'widget.json'), 'utf8')); if (saved && typeof saved === 'object') settings = saved; } catch {}
@@ -112,7 +116,7 @@ async function start() {
   settings.shortcuts = { ...shortcuts.bindings };
   const initial = layoutForDisplays(settings.bounds, screen.getAllDisplays(), settings.scale);
   effectiveScale = initial.scale;
-  window = new BrowserWindow({ ...initial.bounds, transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  window = new BrowserWindow({ ...initial.bounds, title: APP_NAME, icon: nativeImage.createFromPath(ICON_PATH), transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   window.setAlwaysOnTop(true, 'screen-saver');
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   window.webContents.setZoomFactor(effectiveScale);

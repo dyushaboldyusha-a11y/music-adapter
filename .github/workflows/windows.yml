@@ -1,4 +1,4 @@
-name: Windows application
+name: Liberty Wave — Windows application
 on:
   push:
   pull_request:
@@ -28,21 +28,22 @@ jobs:
       - run: npm run dist:win
         env:
           ELECTRON_BUILDER_COMPRESSION_LEVEL: '3'
+      - run: npm run check:branding
       - name: Package browser connector
         shell: pwsh
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          Compress-Archive -Path browser-extension/* -DestinationPath "release/Liberty-Browser-Connector-$version.zip"
+          Compress-Archive -Path browser-extension/* -DestinationPath "release/Liberty-Wave-Browser-Connector-$version.zip"
       - name: Generate checksum
         shell: pwsh
         run: |
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $files = Get-Item "release/Music-Adapter-$version-Windows.exe", "release/Liberty-Browser-Connector-$version.zip"
+          $files = Get-Item "release/Liberty-Wave-$version-Windows.exe", "release/Liberty-Wave-Browser-Connector-$version.zip"
           $lines = foreach ($file in $files) { $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant(); "$hash  $($file.Name)" }
           $lines | Set-Content release/SHA256SUMS.txt -Encoding ascii
       - uses: actions/upload-artifact@v4
         with:
-          name: Music-Adapter-Windows
+          name: Liberty-Wave-Windows
           path: |
             release/*.exe
             release/*.zip
@@ -77,7 +78,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: Music-Adapter-Windows
+          name: Liberty-Wave-Windows
           path: release
       - name: Upload and publish validated release
         env:
@@ -87,9 +88,9 @@ jobs:
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
           tag="v$version"
-          asset="release/Music-Adapter-$version-Windows.exe"
+          asset="release/Liberty-Wave-$version-Windows.exe"
           if ! gh release view "$tag" >/dev/null 2>&1; then
-            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "Music Adapter $version" --notes-file docs/RELEASE_NOTES.md
+            gh release create "$tag" --draft --target "$GITHUB_SHA" --title "Liberty Wave $version" --notes-file docs/RELEASE_NOTES.md
           fi
-          gh release upload "$tag" "$asset" "release/Liberty-Browser-Connector-$version.zip" release/SHA256SUMS.txt --clobber
-          gh release edit "$tag" --target "$GITHUB_SHA" --title "Music Adapter $version — Liberty" --notes-file docs/RELEASE_NOTES.md --draft=false --latest
+          gh release upload "$tag" "$asset" "release/Liberty-Wave-Browser-Connector-$version.zip" release/SHA256SUMS.txt --clobber
+          gh release edit "$tag" --target "$GITHUB_SHA" --title "Liberty Wave $version" --notes-file docs/RELEASE_NOTES.md --draft=false --latest

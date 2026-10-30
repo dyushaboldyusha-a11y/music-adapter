@@ -56,7 +56,7 @@ async function sync() {
       catch { result = { ok: false, error: 'Вкладка закрыта или перезагружена' }; }
       results.push({ id: action.id, ...result }); dirty = true;
     }
-  } catch (error) { lastError = error.message === 'Failed to fetch' ? 'Откройте настольный виджет Liberty' : error.message; }
+  } catch (error) { lastError = error.message === 'Failed to fetch' ? 'Откройте настольный виджет Liberty Wave' : error.message; }
   finally { syncing = false; if (dirty && !timer) timer = setTimeout(() => { timer = null; sync(); }, 100); }
 }
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
@@ -69,7 +69,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.url !== chrome.runtime.getURL('popup.html')) return;
   if (message.type === 'status') { config().then(c => respond({ paired: !!c.token, players: players.size, error: lastError })); return true; }
   if (message.type === 'pair') {
-    (async () => { try { const c = await config(); const data = await post('/v1/pair', { code: String(message.code || '').trim().toUpperCase(), clientId: c.clientId, browser: LibertyServices.browserName(navigator.userAgent) }); await chrome.storage.local.set({ token: data.token }); lastError = ''; schedule(); respond({ ok: true }); } catch (error) { respond({ ok: false, error: error.message === 'Failed to fetch' ? 'Откройте Liberty и нажмите «Подключить браузер»' : error.message }); } })();
+    (async () => { try { const c = await config(); const data = await post('/v1/pair', { code: String(message.code || '').trim().toUpperCase(), clientId: c.clientId, browser: LibertyServices.browserName(navigator.userAgent) }); await chrome.storage.local.set({ token: data.token }); lastError = ''; schedule(); respond({ ok: true }); } catch (error) { respond({ ok: false, error: error.message === 'Failed to fetch' ? 'Откройте Liberty Wave и нажмите «Подключить браузер»' : error.message }); } })();
     return true;
   }
   if (message.type === 'disconnect') { chrome.storage.local.remove('token').then(() => respond({ ok: true })); return true; }
