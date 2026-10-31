@@ -15,4 +15,6 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 # Exercise the actual Node.js client used by Electron, rather than a second
 # PowerShell process wrapper with a different console/pipe encoding.
 & node (Join-Path $PSScriptRoot 'check-windows.cjs')
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& node (Join-Path $PSScriptRoot 'check-installer-handshake.cjs')
 exit $LASTEXITCODE

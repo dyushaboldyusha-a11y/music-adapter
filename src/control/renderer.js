@@ -73,13 +73,13 @@ function updateSources() {
 }
 function updateUpdates() {
   const value = state.updates || {}, phase = value.phase || 'idle';
-  const descriptions = { idle: 'Проверьте, доступна ли новая версия приложения.', checking: 'Проверяю последнюю версию…', current: 'Обновление не требуется.', available: `Доступна версия ${value.version}.`, downloading: `Скачивание: ${Math.round((value.downloaded || 0) / Math.max(1, value.total || 1) * 100)}%`, ready: 'Обновление скачано. Контрольная сумма проверена.', installing: 'Устанавливаю обновление и перезапускаю Liberty Wave…', error: value.error || 'Не удалось проверить обновления' };
+  const descriptions = { idle: 'Проверьте, доступна ли новая версия приложения.', checking: 'Проверяю последнюю версию…', current: 'Обновление не требуется.', available: `Доступна версия ${value.version}.`, downloading: `Скачивание: ${Math.round((value.downloaded || 0) / Math.max(1, value.total || 1) * 100)}%`, ready: 'Обновление скачано. Контрольная сумма проверена.', installing: 'Подготавливаю установку. После проверки приложение перезапустится…', error: value.error || 'Не удалось проверить обновления' };
   $('installed-version').textContent = `Версия ${state.version}`; $('update-status').textContent = descriptions[phase]; $('update-status').classList.toggle('error', phase === 'error');
   $('update-check').hidden = ['ready', 'downloading', 'installing'].includes(phase); $('update-check').disabled = phase === 'checking';
   $('update-download').hidden = !value.version || value.ready || ['checking', 'downloading', 'installing'].includes(phase);
   $('update-install').hidden = !value.ready || phase === 'installing'; $('update-install').disabled = !value.supported;
   $('update-cancel').hidden = phase !== 'downloading'; $('update-progress').hidden = phase !== 'downloading'; $('update-progress').max = value.total || 1; $('update-progress').value = value.downloaded || 0;
-  $('update-detail').textContent = value.ready && !value.supported ? 'Установка доступна в переносимой Windows-сборке.' : 'Обновления загружаются из официального GitHub-репозитория Liberty Wave.';
+  $('update-detail').textContent = value.ready && !value.supported ? 'Установка доступна в переносимой Windows-сборке.' : value.version ? `В той же папке появится Liberty-Wave-${value.version}-Windows.exe. После успешной замены старый файл будет удалён. Настройки сохранятся.` : 'Обновления загружаются из официального GitHub-репозитория. Старые загрузки очищаются автоматически.';
   $('update-dot').hidden = !value.version;
 }
 function update(next) {

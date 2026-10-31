@@ -18,12 +18,14 @@ try {
     & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetPath $target -UpdatePath $update -ExpectedSha256 $hash -WaitPid 0 -StatusPath $status -NoRelaunch
     if ($LASTEXITCODE -eq 0 -or [IO.File]::ReadAllText($target) -ne 'new app') { throw 'A checksum failure changed the existing application.' }
     $hash = 'd334e59d33841cf4c2f136649e6e0e41e80c67aa2c078ff18d128f34a40e8316'
-    $lock = [IO.File]::Open($target, 'Open', 'Read', 'None')
-    try {
-        & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetPath $target -UpdatePath $update -ExpectedSha256 $hash -WaitPid 0 -StatusPath $status -NoRelaunch -LockWaitSeconds 1
-        if ($LASTEXITCODE -eq 0) { throw 'An application in use must not be replaced.' }
-    } finally { $lock.Dispose() }
-    if ([IO.File]::ReadAllText($target) -ne 'new app' -or (Get-ChildItem $directory -Filter '*.pending.exe').Count -ne 0) { throw 'A locked executable was changed or temporary data leaked.' }
-    Write-Output 'PASS: in-place update, Unicode/space-safe paths, checksum failure, locked-file protection and temporary-file cleanup.'
+    if ($env:OS -eq 'Windows_NT') {
+        $lock = [IO.File]::Open($target, 'Open', 'Read', 'None')
+        try {
+            & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $scriptPath -TargetPath $target -UpdatePath $update -ExpectedSha256 $hash -WaitPid 0 -StatusPath $status -NoRelaunch -LockWaitSeconds 1
+            if ($LASTEXITCODE -eq 0) { throw 'An application in use must not be replaced.' }
+        } finally { $lock.Dispose() }
+        if ([IO.File]::ReadAllText($target) -ne 'new app' -or (Get-ChildItem $directory -Filter '*.pending.exe').Count -ne 0) { throw 'A locked executable was changed or temporary data leaked.' }
+    }
+    Write-Output 'PASS: in-place update, Unicode/space-safe paths, checksum failure and temporary-file cleanup; Windows additionally checks locked-file protection.'
     exit 0
 } finally { Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue }

@@ -10,6 +10,10 @@ const REPOSITORY = 'dyushaboldyusha-a11y/music-adapter';
 const API_URL = `https://api.github.com/repos/${REPOSITORY}/releases/latest`;
 const MAX_DOWNLOAD = 512 * 1024 * 1024;
 const HOSTS = new Set(['api.github.com', 'github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com', 'github-production-release-asset-2e65be.s3.amazonaws.com']);
+const UUID = '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}';
+const CACHED_EXE = new RegExp(`^Liberty-Wave-(\\d+\\.\\d+\\.\\d+)-${UUID}\\.exe$`, 'i');
+const PARTIAL = new RegExp(`^${UUID}\\.part$`, 'i');
+const pathKey = filename => process.platform === 'win32' ? path.resolve(filename).toLowerCase() : path.resolve(filename);
 function versionParts(value) { const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(value || ''); const parts = match?.slice(1).map(Number); return parts?.every(Number.isSafeInteger) ? parts : null; }
 function isNewer(candidate, current) {
   const a = versionParts(candidate), b = versionParts(current);
@@ -46,10 +50,33 @@ async function validateExecutable(filename) {
 }
 
 class AppUpdater extends EventEmitter {
-  constructor({ currentVersion, directory, supported = false, fetch = globalThis.fetch, launchInstaller }) {
+  constructor({ currentVersion, directory, supported = false, fetch = globalThis.fetch, launchInstaller, protectedPaths = [] }) {
     super(); this.directory = directory; this.fetch = fetch; this.launchInstaller = launchInstaller;
     this.state = { phase: 'idle', currentVersion, version: null, supported, downloaded: 0, total: 0, error: null };
     this.release = null; this.readyFile = null; this.controller = null;
+    this.protectedPaths = new Set(protectedPaths.filter(value => typeof value === 'string' && value).map(pathKey));
+  }
+  async cacheFiles() {
+    let entries; try { entries = await fs.readdir(this.directory, { withFileTypes: true }); } catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+    return entries.filter(entry => entry.isFile() && (CACHED_EXE.test(entry.name) || PARTIAL.test(entry.name))).map(entry => ({ filename: path.join(this.directory, entry.name), version: CACHED_EXE.exec(entry.name)?.[1] }));
+  }
+  async cleanCache(keep = []) {
+    const allowed = new Set([...this.protectedPaths, ...keep.filter(Boolean).map(pathKey)]);
+    for (const entry of await this.cacheFiles()) if (!allowed.has(pathKey(entry.filename))) {
+      try { await fs.rm(entry.filename, { force: true }); }
+      catch { throw new Error('Не удалось удалить старую загрузку обновления. Закройте другие копии Liberty Wave и повторите попытку'); }
+    }
+  }
+  initialize() {
+    if (!this.initialization) this.initialization = (async () => {
+      const candidates = [];
+      for (const entry of await this.cacheFiles()) if (entry.version && isNewer(entry.version, this.state.currentVersion) && !this.protectedPaths.has(pathKey(entry.filename))) {
+        try { candidates.push({ ...entry, modified: (await fs.stat(entry.filename)).mtimeMs }); } catch {}
+      }
+      this.cachedFile = candidates.sort((a, b) => b.modified - a.modified)[0] || null;
+      await this.cleanCache([this.cachedFile?.filename]);
+    })().catch(error => { this.initialization = null; throw error; });
+    return this.initialization;
   }
   snapshot() { return { ...this.state, ready: !!this.readyFile }; }
   update(changes) { Object.assign(this.state, changes); this.emit('state', this.snapshot()); }
@@ -78,16 +105,19 @@ class AppUpdater extends EventEmitter {
     if (this.busy()) return { ok: false, error: 'Обновление уже выполняется' };
     this.update({ phase: 'checking', error: null });
     try {
+      await this.initialize();
       const response = await this.request(API_URL, AbortSignal.timeout(20000));
       const release = JSON.parse(await smallBody(response, 2 * 1024 * 1024));
       if (release.draft || release.prerelease || !versionParts(release.tag_name)) throw new Error('GitHub вернул неподходящий релиз');
-      if (!isNewer(release.tag_name, this.state.currentVersion)) { this.release = null; this.readyFile = null; this.update({ phase: 'current', version: null }); return { ok: true }; }
+      if (!isNewer(release.tag_name, this.state.currentVersion)) { this.release = null; this.readyFile = null; this.cachedFile = null; await this.cleanCache(); this.update({ phase: 'current', version: null }); return { ok: true }; }
       const version = release.tag_name.replace(/^v/, '');
       const exe = releaseAsset(release, `Liberty-Wave-${version}-Windows.exe`, version);
       const sums = releaseAsset(release, 'SHA256SUMS.txt', version);
       if (sums.size > 65536) throw new Error('Некорректный файл контрольных сумм');
       this.release = { version, exe, sums };
       if (this.readyFile?.version !== version) this.readyFile = null;
+      if (this.cachedFile?.version !== version) this.cachedFile = null;
+      await this.cleanCache([this.readyFile?.filename, this.cachedFile?.filename]);
       this.update({ phase: this.readyFile ? 'ready' : 'available', version, downloaded: 0, total: exe.size }); return { ok: true };
     } catch (error) { return this.fail(error); }
   }
@@ -98,9 +128,22 @@ class AppUpdater extends EventEmitter {
     const signal = AbortSignal.any([this.controller.signal, AbortSignal.timeout(10 * 60 * 1000)]);
     this.update({ phase: 'downloading', error: null, downloaded: 0, total: release.exe.size });
     try {
+      await this.initialize();
       const checksums = await smallBody(await this.request(release.sums.url, signal), 65536);
       const expected = checksums.split(/\r?\n/).map(line => /^([a-f0-9]{64})\s+\*?(.+?)\s*$/i.exec(line)).find(line => line?.[2] === release.exe.name)?.[1]?.toLowerCase();
       if (!expected) throw new Error('В релизе нет контрольной суммы приложения');
+      const candidate = this.readyFile || this.cachedFile;
+      if (candidate?.version === release.version && !this.protectedPaths.has(pathKey(candidate.filename))) {
+        let reusable = false;
+        try { reusable = (await fs.stat(candidate.filename)).size === release.exe.size && await fileHash(candidate.filename) === expected; if (reusable) await validateExecutable(candidate.filename); } catch { reusable = false; }
+        if (reusable) {
+          await this.cleanCache([candidate.filename]);
+          this.readyFile = { filename: candidate.filename, sha256: expected, version: release.version }; this.cachedFile = null;
+          this.update({ phase: 'ready', downloaded: release.exe.size }); return { ok: true };
+        }
+      }
+      this.readyFile = null; this.cachedFile = null;
+      await this.cleanCache();
       await fs.mkdir(this.directory, { recursive: true });
       partial = path.join(this.directory, `${randomUUID()}.part`);
       const response = await this.request(release.exe.url, signal);
@@ -117,7 +160,6 @@ class AppUpdater extends EventEmitter {
       await validateExecutable(partial);
       const filename = path.join(this.directory, `Liberty-Wave-${release.version}-${randomUUID()}.exe`);
       await fs.rename(partial, filename); partial = null;
-      if (this.readyFile) await fs.rm(this.readyFile.filename, { force: true });
       this.readyFile = { filename, sha256: expected, version: release.version };
       this.update({ phase: 'ready', downloaded: size }); return { ok: true };
     } catch (error) { return this.fail(signal.aborted ? new Error('Загрузка отменена или истекло время ожидания') : error); }

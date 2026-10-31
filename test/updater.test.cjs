@@ -70,3 +70,32 @@ test('connection errors identify the failed GitHub host and a safe Chromium erro
   assert.match(updater.snapshot().error, /api\.github\.com \(ERR_NAME_NOT_RESOLVED\)/);
   assert.ok(!updater.snapshot().error.includes('private'));
 }));
+test('startup removes obsolete cache and partials, keeps only one newer candidate and preserves unrelated or running files', async () => withUpdater(async ({ updater, directory }) => {
+  const id = number => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
+  const names = [`Liberty-Wave-0.4.1-${id(1)}.exe`, `Liberty-Wave-0.4.2-${id(2)}.exe`, `Liberty-Wave-0.4.3-${id(3)}.exe`, `${id(4)}.part`, `Liberty-Wave-0.3.0-${id(5)}.exe`, 'personal.exe', 'install-update.ps1'];
+  for (let i = 0; i < names.length; i++) { const file = path.join(directory, names[i]); await fs.writeFile(file, 'file'); await fs.utimes(file, 100 + i, 100 + i); }
+  const current = new AppUpdater({ currentVersion: '0.4.1', directory, protectedPaths: [path.join(directory, names[4])] });
+  await current.initialize();
+  assert.deepEqual((await fs.readdir(directory)).sort(), [names[2], names[4], names[5], names[6]].sort());
+}));
+test('a previously verified download is reused after restart without creating or downloading another executable', async () => withUpdater(async ({ updater, server, directory }) => {
+  await updater.check(); await updater.download(); const filename = updater.readyFile.filename;
+  const restarted = new AppUpdater({ currentVersion: '0.4.1', directory, fetch: server.fetch });
+  server.calls.length = 0; await restarted.check(); assert.equal((await restarted.download()).ok, true);
+  assert.equal(restarted.readyFile.filename, filename);
+  assert.ok(!server.calls.some(call => call.url.endsWith('.exe')));
+  assert.equal((await fs.readdir(directory)).filter(name => name.endsWith('.exe')).length, 1);
+}));
+test('changed cached bytes are discarded and replaced only by a fresh checksum-verified download', async () => withUpdater(async ({ updater, server, directory }) => {
+  await updater.check(); await updater.download(); const old = updater.readyFile.filename; await fs.writeFile(old, 'corrupted');
+  const restarted = new AppUpdater({ currentVersion: '0.4.1', directory, fetch: server.fetch });
+  await restarted.check(); assert.equal((await restarted.download()).ok, true); assert.notEqual(restarted.readyFile.filename, old);
+  assert.deepEqual(await fs.readFile(restarted.readyFile.filename), executable);
+  assert.equal((await fs.readdir(directory)).filter(name => name.endsWith('.exe')).length, 1);
+}));
+test('launching a newer application clears old downloaded versions and duplicate download clicks reuse one verified file', async () => withUpdater(async ({ updater, server, directory }) => {
+  await updater.check(); const first = updater.download(); assert.equal((await updater.download()).ok, false); assert.equal((await first).ok, true);
+  const filename = updater.readyFile.filename; await updater.download(); assert.equal(updater.readyFile.filename, filename);
+  const installed = new AppUpdater({ currentVersion: '0.4.2', directory, fetch: server.fetch }); await installed.initialize();
+  assert.deepEqual(await fs.readdir(directory), []);
+}));

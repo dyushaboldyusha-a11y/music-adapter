@@ -1,9 +1,9 @@
 const { app, BrowserWindow, globalShortcut, ipcMain, Tray, nativeImage, screen, shell, clipboard, net, dialog } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
 const { ControlWindow } = require('./control-window.cjs');
 const { AppUpdater } = require('./updater.cjs');
+const { launchPortableInstaller } = require('./install-launcher.cjs');
 const { createUpdateFetch } = require('./update-fetch.cjs');
 const { WindowsMedia, DemoMedia, EMPTY_STATE, validateCommand } = require('./media.cjs');
 const { WindowsAudio, VolumeQueue } = require('./audio.cjs');
@@ -174,15 +174,14 @@ async function start() {
   const portableFile = process.env.PORTABLE_EXECUTABLE_FILE;
   const canInstall = process.platform === 'win32' && app.isPackaged && typeof portableFile === 'string' && path.isAbsolute(portableFile) && portableFile.toLowerCase().endsWith('.exe');
   const updateDirectory = path.join(app.getPath('userData'), 'updates');
-  updater = new AppUpdater({ currentVersion: app.getVersion(), directory: updateDirectory, supported: canInstall, fetch: createUpdateFetch(net), launchInstaller: async update => {
+  updater = new AppUpdater({ currentVersion: app.getVersion(), directory: updateDirectory, supported: canInstall, protectedPaths: [portableFile], fetch: createUpdateFetch(net), launchInstaller: async update => {
     if (!canInstall || !fs.statSync(portableFile).isFile()) throw new Error('Не найден исходный переносимый .exe');
-    const helper = path.join(updateDirectory, 'install-update.ps1');
     const source = app.isPackaged ? path.join(process.resourcesPath, 'native/install-update.ps1') : path.join(__dirname, '../native/install-update.ps1');
-    fs.copyFileSync(source, helper);
-    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', helper, '-TargetPath', portableFile, '-UpdatePath', update.filename, '-ExpectedSha256', update.sha256, '-WaitPid', String(process.pid), '-StatusPath', path.join(updateDirectory, 'last-install.json')], { detached: true, windowsHide: true, stdio: 'ignore' });
-    await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
-    child.unref(); setTimeout(() => app.quit(), 250);
+    const child = await launchPortableInstaller({ directory: updateDirectory, script: source, target: portableFile, update, waitPid: process.pid });
+    child.once('exit', () => { if (updater.snapshot().phase === 'installing') updater.fail(new Error('Установщик завершился до закрытия приложения. Подробности в installer-start.log')); });
+    setTimeout(() => { if (child.exitCode === null && child.signalCode === null) app.quit(); }, 250);
   } });
+  await updater.initialize().catch(error => updater.fail(error));
   updater.on('state', publish);
   controls = new ControlWindow({ BrowserWindow, ipcMain, screen, icon: nativeImage.createFromPath(ICON_PATH), getState: controlSnapshot, action: controlAction, getBounds: () => settings.controlBounds, saveBounds: value => { settings.controlBounds = value; save(); }, onBlur: endControlCapture });
   const initial = layoutForDisplays(settings[boundsKey()], screen.getAllDisplays(), settings.scale, compactLayout() ? COMPACT_SIZE : SIZE, preferences(settings));
