@@ -81,7 +81,7 @@ kbd { border: 1px solid #ffffff13; border-radius: 6px; font: 10px 'Segoe UI',san
 .switch { appearance: none; flex-shrink: 0; width: 34px; height: 20px; margin: 0; border-radius: 20px; background: #45454c; cursor: pointer; position: relative; transition: background .15s; }
 .switch::after { content: ''; display: block; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #c4c4cc; transition: transform .15s; }
 .switch:checked { background: var(--red); }
-.switch:checked::after { transform: translateX(14px); background: white; }
+.switch:checked::after { transform: translateX(14px); background: var(--on-accent, #000); }
 .source-choice { padding: 18px 20px; }
 .source-choice label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 9px; }
 select, input[type="text"] { background: #303034; color: var(--text); border: 1px solid #ffffff0e; border-radius: 8px; padding: 9px 11px; outline-offset: 2px; }
@@ -102,8 +102,8 @@ select, input[type="text"] { background: #303034; color: var(--text); border: 1p
 .description { color: var(--muted); font-size: 11px; line-height: 19px; margin: 15px 0; }
 .button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .button-row button { font-size: 11px; }
-.primary { background: var(--red); color: #fff; border-color: transparent; font-weight: 550; }
-.primary:hover:enabled { background: color-mix(in srgb,var(--red) 86%,white); border-color: transparent; }
+.primary { background: var(--red); color: var(--on-accent, #000); border-color: transparent; font-weight: 550; }
+.primary:hover:enabled { background: color-mix(in srgb,var(--red) 86%,white); color: var(--on-accent-hover, #000); border-color: transparent; }
 .danger { color: #f18a91; }
 #pairing { border-top: 1px solid #ffffff0b; margin-top: 19px; padding-top: 18px; }
 .field-label { display: block; color: #85858e; font-size: 9px; letter-spacing: 1px; }

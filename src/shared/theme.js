@@ -17,11 +17,18 @@
     return '#' + rgb.map(value => Math.round((value + m) * 255 + 1e-9).toString(16).padStart(2, '0')).join('');
   }
   function fromPoint(x, y, radius) { return { h: (Math.atan2(y, x) * 180 / Math.PI + 360) % 360, s: Math.min(1, Math.hypot(x, y) / radius) }; }
+  function foreground(color, whiteMix = 0) {
+    const channels = [1, 3, 5].map(index => parseInt(color.slice(index, index + 2), 16) / 255 * (1 - whiteMix) + whiteMix);
+    const linear = channels.map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+    const luminance = linear[0] * .2126 + linear[1] * .7152 + linear[2] * .0722;
+    return (luminance + .05) / .05 >= 1.05 / (luminance + .05) ? '#000000' : '#ffffff';
+  }
   function apply(color) {
     const hsv = toHsv(color), min = hsv.v * (1 - hsv.s), lightness = (hsv.v + min) / 2;
     const saturation = lightness > 0 && lightness < 1 ? (hsv.v - min) / (1 - Math.abs(2 * lightness - 1)) : 0;
     const style = root.document.documentElement.style;
     style.setProperty('--red', normalizeColor(color)); style.setProperty('--theme-hue', hsv.h); style.setProperty('--theme-saturation', saturation);
+    style.setProperty('--on-accent', foreground(color)); style.setProperty('--on-accent-hover', foreground(color, .14));
   }
   const api = { DEFAULT_COLOR, normalizeColor, toHsv, fromHsv, fromPoint, apply };
   if (typeof module !== 'undefined') module.exports = api;

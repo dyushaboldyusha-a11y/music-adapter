@@ -13,6 +13,21 @@ async function waitState(panel, predicate) {
   while (Date.now() < deadline) { const state = await panel.evaluate(() => libertyControl.getState()); if (predicate(state)) return state; await new Promise(resolve => setTimeout(resolve, 50)); }
   throw new Error('Control state did not reach expected value');
 }
+async function assertAccentContrast(panel, selector, minimum, pseudo = null) {
+  const ratio = await panel.locator(selector).evaluate((element, pseudo) => {
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
+    const context = canvas.getContext('2d');
+    const luminance = color => {
+      context.clearRect(0, 0, 1, 1); context.fillStyle = color; context.fillRect(0, 0, 1, 1);
+      const channels = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3).map(value => { value /= 255; return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4; });
+      return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
+    };
+    const background = luminance(getComputedStyle(element).backgroundColor), style = getComputedStyle(element, pseudo);
+    const foreground = luminance(pseudo ? style.backgroundColor : style.color);
+    return (Math.max(background, foreground) + .05) / (Math.min(background, foreground) + .05);
+  }, pseudo);
+  assert.ok(ratio >= minimum, `${selector}${pseudo || ''}: contrast ${ratio.toFixed(2)} must be at least ${minimum}:1`);
+}
 async function launch(demo = true) {
   app = await _electron.launch({ executablePath: require('electron'), args: [root, ...(demo ? ['--demo', '--widget-only'] : []), '--disable-gpu', `--user-data-dir=${profile}`] });
   const widget = await app.firstWindow(); await widget.waitForFunction(() => !!window.musicWidget);
@@ -57,6 +72,28 @@ try {
   assert.equal((await panel.evaluate(() => libertyControl.getState())).preferences.color, '#ff3045');
   await panel.locator('#color-hex').fill('#oops'); assert.equal(await panel.locator('#color-save').isDisabled(), true);
   await panel.locator('#color-cancel').click();
+  for (const color of ['#ffffff', '#fff5dc', '#ffff00', '#22d3ee', '#ff3045', '#666666', '#000000']) {
+    await panel.locator('[data-page="appearance"]').click();
+    await panel.locator('#color-hex').fill(color);
+    await panel.mouse.move(5, 5); await panel.waitForTimeout(180);
+    await assertAccentContrast(panel, '#color-save', 4.5);
+    await panel.locator('#color-save').hover(); await panel.waitForTimeout(180);
+    await assertAccentContrast(panel, '#color-save', 4.5);
+    await panel.locator('#color-save').click(); await waitState(panel, s => s.preferences.color === color);
+    await panel.locator('[data-page="home"]').click();
+    await assertAccentContrast(panel, '#compact', 3, '::after');
+    if (color === '#ffffff') {
+      await panel.locator('#compact').uncheck(); await waitState(panel, s => !s.compact);
+      await panel.waitForTimeout(180);
+      await assertAccentContrast(panel, '#compact', 3, '::after');
+      await panel.locator('#compact').check(); await waitState(panel, s => s.compact);
+      await widget.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--red').trim() === '#ffffff', null, { polling: 50 });
+      assert.equal(await widget.locator('#play-pause').evaluate(el => getComputedStyle(el).color), 'rgb(255, 255, 255)');
+      await mkdir(join(root, 'artifacts'), { recursive: true });
+      await panel.screenshot({ path: join(root, 'artifacts/control-white-theme.png') });
+    }
+  }
+  await panel.locator('[data-page="appearance"]').click();
   await panel.locator('[data-color="#438bff"]').click(); await panel.locator('#color-save').click();
   await waitState(panel, s => s.preferences.color === '#438bff');
   assert.equal(await widget.locator('#play-pause').evaluate(el => getComputedStyle(el).color), 'rgb(67, 139, 255)');
@@ -112,5 +149,5 @@ try {
   ({ widget, panel } = await launch(false));
   const restored = await waitState(panel, s => s.preferences.color === '#438bff');
   assert.equal(restored.interaction, false); assert.equal(restored.preferences.compact, true); assert.equal(restored.shortcuts.bindings.toggleInteraction, 'F8');
-  console.log('PASS: standalone Liberty Wave desktop app, title, isolated IPC, locked overlay controls, sources/pairing, palette, preferences, hotkey capture/blur recovery, verified updater, close-to-tray, reopening, normal startup and profile persistence.');
+  console.log('PASS: standalone Liberty Wave desktop app, title, isolated IPC, locked overlay controls, sources/pairing, palette, readable buttons/switches on light and dark accents including hover, preferences, hotkey capture/blur recovery, verified updater, close-to-tray, reopening, normal startup and profile persistence.');
 } finally { await browser?.close(); await app?.close(); await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }

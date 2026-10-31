@@ -214,7 +214,9 @@ async function start() {
   interaction = !shortcuts.snapshot().available.toggleInteraction || demo;
   updateTray();
   await window.loadFile(path.join(__dirname, 'renderer/index.html'));
-  window.showInactive();
+  // Navigation resets Chromium's zoom. Restore it before showing the pinned
+  // widget, which does not run the layout restoration used by editing mode.
+  placement.restore();
   setInteraction(interaction);
   browserBridge = new BrowserBridge({ port: demo ? 0 : 16837, dataFile: path.join(app.getPath('userData'), 'browser-connections.json') });
   try { await browserBridge.start(); } catch (error) { console.warn('Browser connector unavailable:', error.code); }
