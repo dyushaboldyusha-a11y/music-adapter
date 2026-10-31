@@ -22,7 +22,8 @@
     "test:control": "node scripts/smoke-control.mjs",
     "test:update-network": "electron scripts/check-update-network.cjs",
     "test:personalization": "node scripts/smoke-personalization.mjs",
-    "test:tab-wave": "node scripts/smoke-tab-wave.mjs"
+    "test:tab-wave": "node scripts/smoke-tab-wave.mjs",
+    "test:wave-fixes": "node scripts/smoke-wave-fixes.mjs"
   },
   "devDependencies": {
     "electron": "45.1.0",

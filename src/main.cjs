@@ -54,7 +54,7 @@ function refreshState() {
     cachedArtwork = state.artwork; artworkAccent = null;
     try { if (cachedArtwork) { const image = nativeImage.createFromDataURL(cachedArtwork).resize({ width: 40, height: 40 }); if (!image.isEmpty()) artworkAccent = artworkColor(image.toBitmap(), null); } } catch {}
   }
-  audio?.configure({ target: native && state.connected ? state.source.appId : '', enabled: settings.waveMode === 'audio' && settings.waveIntensity > 0, economy: settings.waveEconomy === true });
+  audio?.configure({ target: native && state.connected ? state.source.appId : '', enabled: !!native && state.connected && state.playing && settings.waveMode === 'audio' && settings.waveIntensity > 0, economy: settings.waveEconomy === true });
   visibility?.update({ ...preferences(settings), playing: state.connected && state.playing, interaction });
   publish();
 }
@@ -186,7 +186,7 @@ async function start() {
   controls = new ControlWindow({ BrowserWindow, ipcMain, screen, icon: nativeImage.createFromPath(ICON_PATH), getState: controlSnapshot, action: controlAction, getBounds: () => settings.controlBounds, saveBounds: value => { settings.controlBounds = value; save(); }, onBlur: endControlCapture });
   const initial = layoutForDisplays(settings[boundsKey()], screen.getAllDisplays(), settings.scale, compactLayout() ? COMPACT_SIZE : SIZE, preferences(settings));
   effectiveScale = initial.scale;
-  window = new BrowserWindow({ ...initial.bounds, title: APP_NAME, icon: nativeImage.createFromPath(ICON_PATH), transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  window = new BrowserWindow({ ...initial.bounds, title: APP_NAME, icon: nativeImage.createFromPath(ICON_PATH), transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
   window.setAlwaysOnTop(true, 'screen-saver');
   window.removeMenu();
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });

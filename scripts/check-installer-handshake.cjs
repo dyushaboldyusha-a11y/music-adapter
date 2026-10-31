@@ -46,5 +46,11 @@ const { launchPortableInstaller } = require('../src/install-launcher.cjs');
     assert.equal(await fs.readFile(target, 'utf8'), 'previous application'); assert.equal(await fs.readFile(replacement, 'utf8'), 'changed after staging');
     assert.ok(!(await fs.readdir(downloads)).some(name => /pending|backup/.test(name)));
     console.log('PASS: actual Node → PowerShell startup handshake, staged checksum, wait for live parent, same-folder versioned replacement, source/backup cleanup and collision protection. No downloaded executable is launched.');
+  } catch (error) {
+    for (const name of ['installer-start.log', 'last-install.json', 'installer-ready.json']) {
+      try { console.error(name + ': ' + (await fs.readFile(path.join(cache, name), 'utf8')).slice(0, 10000)); } catch {}
+    }
+    console.error('Parent probe:', { pid: parent.pid, exitCode: parent.exitCode, signalCode: parent.signalCode });
+    throw error;
   } finally { parent.kill(); extraParent?.kill(); child?.kill(); await fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

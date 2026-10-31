@@ -12,7 +12,7 @@ function update(next) {
   if (state.source?.id !== next.source?.id || !next.interaction) { clearTimeout(volumeTimer); volumeEditing = false; }
   state = next; playbackClock.update(next);
   document.body.classList.toggle('compact', state.compact === true);
-  audioWave.update(state.preferences);
+  audioWave.update(state.preferences, { visible: !state.autoHidden });
   LibertyTheme.apply(state.effectiveColor || state.preferences?.color || LibertyTheme.DEFAULT_COLOR);
   document.body.classList.toggle('auto-hidden', state.autoHidden === true);
   for (const [key, className] of [['showArtwork', 'no-artwork'], ['showArtist', 'no-artist'], ['showTime', 'no-time']]) document.body.classList.toggle(className, state.preferences?.[key] === false);

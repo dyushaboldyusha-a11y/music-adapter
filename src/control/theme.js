@@ -12,7 +12,7 @@
       $('wheel-marker').style.backgroundColor = draft;
       wheel.setAttribute('aria-valuenow', Math.min(359, Math.round(hsv.h))); wheel.setAttribute('aria-valuetext', draft);
       $('color-save').disabled = busy || !dirty; $('color-cancel').disabled = busy || !dirty;
-      $('color-status').textContent = dirty ? 'Предпросмотр. Примените цвет, чтобы изменить виджет.' : 'Цвет применяется к виджету и окну Liberty Wave.';
+      $('color-status').textContent = ''; $('color-status').hidden = true;
       $('color-status').classList.remove('error');
     }
     function select(color) { hsv = api.toHsv(color); render(); }
@@ -35,7 +35,7 @@
     $('brightness').addEventListener('input', () => { hsv.v = Number($('brightness').value) / 100; render(); });
     $('color-hex').addEventListener('input', () => {
       try { select(api.normalizeColor($('color-hex').value)); }
-      catch (error) { $('color-status').textContent = error.message; $('color-status').classList.add('error'); $('color-save').disabled = true; $('color-cancel').disabled = false; }
+      catch (error) { $('color-status').textContent = error.message; $('color-status').hidden = false; $('color-status').classList.add('error'); $('color-save').disabled = true; $('color-cancel').disabled = false; }
     });
     $('color-cancel').addEventListener('click', () => select(saved));
     $('color-save').addEventListener('click', async () => {

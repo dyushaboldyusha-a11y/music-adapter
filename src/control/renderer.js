@@ -103,7 +103,6 @@ function update(next) {
   setRange('volume', Math.round((state.volume || 0) * 100)); if (!editingRanges.has('volume')) $('volume-value').textContent = `${$('volume').value}%`;
   for (const [id, key] of preferences) { setRange(id, Math.round(state.preferences[key] * 100)); if (!editingRanges.has(id)) $(`${id}-value`).textContent = `${$(id).value}%`; }
   $('wave-mode').value = state.preferences.waveMode; $('wave-economy').checked = state.preferences.waveEconomy;
-  $('wave-note').textContent = state.source?.kind === 'browser' ? 'Только звук выбранной вкладки. В расширении нажмите «Волна этой вкладки» на музыкальной странице. Микрофон не используется.' : 'Только аудиосессии выбранного музыкального приложения Windows. Звук игр и Discord не учитывается. Если источник недоступен, волна затухает.';
   $('pair-browser').disabled = !state.browserAvailable; $('browser-status').textContent = state.pairedBrowsers ? `Подключено браузеров: ${state.pairedBrowsers}` : 'Браузер ещё не подключён'; $('revoke').hidden = !state.pairedBrowsers;
   $('pairing').hidden = !state.pairing; $('pair-code').textContent = state.pairing?.code || '';
   updateSources(); updateUpdates(); paint();

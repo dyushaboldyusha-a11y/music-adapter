@@ -30,3 +30,18 @@ test('explicit source selection targets exactly that player and does not fall ba
   await hub.selectSource('native:spotify'); await tick();
   await hub.command('playPause'); assert.equal(calls[1][2], 'native:spotify');
 });
+test('manual Yandex selection survives polling and an explicit bridge restart without switching to another app', async () => {
+  const native = new EventEmitter(); native.selectSource = async () => {}; native.command = async () => {}; native.stop = () => {};
+  const browser = new EventEmitter(); browser.sources = () => []; browser.stop = () => {};
+  const hub = new MediaHub(native, browser);
+  const source = id => descriptor({ id, provider: 'yandex', appId: 'YandexMusic.exe', kind: 'app', playing: true });
+  const report = id => native.emit('state', normalizeState({ source: source(id), sources: [source(id)], connected: true, playing: true, title: 'Track', capabilities: { playPause: true } }));
+  report('native:original'); await hub.selectSource('native:original');
+  for (let i = 0; i < 20; i++) { report('native:original'); assert.equal(hub.state.connected, true); assert.equal(hub.state.selection, 'native:original'); }
+  native.emit('state', normalizeState({})); assert.equal(hub.state.connected, false);
+  native.emit('bridge-started'); report('native:after-restart');
+  assert.equal(hub.state.connected, true); assert.equal(hub.state.selection, 'native:after-restart');
+  native.emit('state', normalizeState({})); report('native:another-instance');
+  assert.equal(hub.state.connected, false, 'Closing the chosen app must not silently rebind an unrelated instance');
+  await assert.rejects(hub.command('playPause'));
+});

@@ -1,5 +1,7 @@
 $script:SessionsById = @{}
 $script:SelectedSourceId = $null
+$script:SessionRegistry = @()
+. (Join-Path $PSScriptRoot 'session-registry.ps1')
 
 function Get-SourceDescriptor([string]$AppId) {
     if ($AppId -match '(?i)(yandex.*music|music.*yandex)') { return @{ provider = 'yandex'; kind = 'app'; name = 'Yandex Music'; browser = '' } }
@@ -12,25 +14,40 @@ function Get-SourceDescriptor([string]$AppId) {
     return $null
 }
 
-function Get-SessionId($Session) {
+function Get-SessionIdentity($Session) {
     $pointer = [Runtime.InteropServices.Marshal]::GetIUnknownForObject($Session)
-    try {
-        $hash = [Security.Cryptography.SHA256]::Create()
-        try { return 'native:' + ([BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($Session.SourceAppUserModelId + ':' + $pointer.ToInt64()))).Replace('-', '').Substring(0, 24)).ToLowerInvariant() }
-        finally { $hash.Dispose() }
-    } finally { $null = [Runtime.InteropServices.Marshal]::Release($pointer) }
+    try { return $pointer.ToInt64() } finally { $null = [Runtime.InteropServices.Marshal]::Release($pointer) }
+}
+
+function Get-SessionId($Session) {
+    $identity = Get-SessionIdentity $Session
+    $appId = [string]$Session.SourceAppUserModelId
+    $matches = @($script:SessionRegistry | Where-Object { $_.appId -ieq $appId -and $_.identity -eq $identity })
+    if ($matches.Count -eq 1) { return $matches[0].id }
+    $matches = @($script:SessionRegistry | Where-Object { $_.appId -ieq $appId })
+    if ($matches.Count -eq 1) { return $matches[0].id }
+    $hash = [Security.Cryptography.SHA256]::Create()
+    try { return 'native:' + ([BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($appId + ':' + $identity))).Replace('-', '').Substring(0, 24)).ToLowerInvariant() }
+    finally { $hash.Dispose() }
 }
 
 function Update-SessionSources {
     $next = @{}
     $summaries = [Collections.Generic.List[object]]::new()
-    $currentId = $null
-    try { $current = $manager.GetCurrentSession(); if ($null -ne $current) { $currentId = Get-SessionId $current } } catch {}
+    $candidates = [Collections.Generic.List[object]]::new()
     foreach ($session in $manager.GetSessions()) {
         try {
             $description = Get-SourceDescriptor $session.SourceAppUserModelId
             if ($null -eq $description) { continue }
-            $id = Get-SessionId $session
+            $candidates.Add(@{ appId = [string]$session.SourceAppUserModelId; identity = (Get-SessionIdentity $session); session = $session; description = $description })
+        } catch { [Console]::Error.WriteLine($_.Exception.Message) }
+    }
+    $script:SessionRegistry = Resolve-SessionRegistry -Previous $script:SessionRegistry -Current ($candidates.ToArray())
+    $currentId = $null
+    try { $current = $manager.GetCurrentSession(); if ($null -ne $current) { $currentId = Get-SessionId $current } } catch {}
+    foreach ($entry in $script:SessionRegistry) {
+        try {
+            $session = $entry.session; $description = $entry.description; $id = $entry.id
             $playing = $false
             try { $playing = $session.GetPlaybackInfo().PlaybackStatus.ToString() -eq 'Playing' } catch {}
             $description.id = $id

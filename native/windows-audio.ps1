@@ -18,8 +18,12 @@ using System.Threading;
 namespace LibertyAudio {
   [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class Enumerator {}
   [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)] interface IDevices {
-    [PreserveSig] int EnumAudioEndpoints(int flow, int mask, out IntPtr devices);
+    [PreserveSig] int EnumAudioEndpoints(int flow, int mask, out IDeviceCollection devices);
     [PreserveSig] int GetDefaultAudioEndpoint(int flow, int role, out IDevice device);
+  }
+  [ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)] interface IDeviceCollection {
+    [PreserveSig] int GetCount(out uint count);
+    [PreserveSig] int Item(uint index, out IDevice device);
   }
   [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)] interface IDevice {
     [PreserveSig] int Activate(ref Guid iid, int context, IntPtr activation, [MarshalAs(UnmanagedType.IUnknown)] out object result);
@@ -82,9 +86,7 @@ namespace LibertyAudio {
   public sealed class Output : IDisposable {
     [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern int GetApplicationUserModelId(IntPtr process, ref uint length, StringBuilder id);
     IDevices devices;
-    IDevice device;
-    IManager manager;
-    string deviceId, target = "";
+    string target = "";
     DateTime refreshed = DateTime.MinValue;
     readonly List<IControl> controls = new List<IControl>();
     readonly List<IVolume> volumes = new List<IVolume>();
@@ -97,51 +99,54 @@ namespace LibertyAudio {
       if (target.IndexOf('!') >= 0) return false;
       // Win32 Electron apps can publish an explicit shell ID which the package
       // identity API does not expose. Recognize only known IDs and exact exe names.
-      if (String.Equals(target, "Yandex.Music", StringComparison.OrdinalIgnoreCase) ||
-          String.Equals(target, "YandexMusic", StringComparison.OrdinalIgnoreCase) ||
-          String.Equals(target, "ru.yandex.music", StringComparison.OrdinalIgnoreCase)) {
-        return Array.Exists(new[] { "YandexMusic.exe", "Yandex Music.exe", "Yandex.Music.exe", "\u042f\u043d\u0434\u0435\u043a\u0441 \u041c\u0443\u0437\u044b\u043a\u0430.exe" },
-          name => String.Equals(name, executable, StringComparison.OrdinalIgnoreCase));
-      }
+      if (YandexIdentity(target)) return YandexIdentity(executable);
       return String.Equals(Path.GetFileName(target), executable, StringComparison.OrdinalIgnoreCase);
+    }
+    static bool YandexIdentity(string value) {
+      if (String.IsNullOrEmpty(value)) return false;
+      value = value.Replace('\\', '/'); value = value.Substring(value.LastIndexOf('/') + 1);
+      return Array.Exists(new[] { "Yandex.Music", "YandexMusic", "ru.yandex.music", "ru.yandex.desktop.music", "ru.yandex.music.desktop", "com.squirrel.YandexMusic.YandexMusic", "YandexMusic.exe", "Yandex Music.exe", "Yandex.Music.exe", "\u042f\u043d\u0434\u0435\u043a\u0441 \u041c\u0443\u0437\u044b\u043a\u0430.exe" }, name => String.Equals(name, value, StringComparison.OrdinalIgnoreCase));
     }
     public void Target(string value) { if (target != value) { target = value ?? ""; refreshed = DateTime.MinValue; ClearSessions(); } }
     void ClearSessions() { volumes.Clear(); foreach (var control in controls) Release(control); controls.Clear(); }
-    void ResetDevice() { ClearSessions(); Release(manager); Release(device); manager = null; device = null; deviceId = null; }
+    void ResetDevice() { ClearSessions(); Release(devices); devices = null; }
     void Refresh() {
       if ((DateTime.UtcNow - refreshed).TotalMilliseconds < 1000) return;
-      refreshed = DateTime.UtcNow;
+      refreshed = DateTime.UtcNow; ClearSessions();
+      if (String.IsNullOrEmpty(target)) return;
       try {
         if (devices == null) devices = (IDevices)new Enumerator();
-        IDevice next; Check(devices.GetDefaultAudioEndpoint(0, 1, out next));
-        string id; Check(next.GetId(out id));
-        if (deviceId != id) {
-          ResetDevice(); device = next; deviceId = id;
-          object obj; var iid = typeof(IManager).GUID; Check(device.Activate(ref iid, 23, IntPtr.Zero, out obj)); manager = (IManager)obj;
-        } else Release(next);
-        ClearSessions();
-        if (String.IsNullOrEmpty(target)) return;
-        ISessions sessions; Check(manager.GetSessionEnumerator(out sessions));
+        IDeviceCollection endpoints; Check(devices.EnumAudioEndpoints(0, 1, out endpoints));
         try {
-          int count; Check(sessions.GetCount(out count));
-          for (int i = 0; i < count; i++) {
-            IControl control = null;
+          uint count; Check(endpoints.GetCount(out count));
+          for (uint index = 0; index < count; index++) {
+            IDevice endpoint = null; IManager manager = null; ISessions sessions = null;
             try {
-              Check(sessions.GetSession(i, out control));
-              int status; Check(control.GetState(out status)); if (status == 2) continue;
-              uint pid; Check(((IControl2)control).GetProcessId(out pid)); if (pid == 0) continue;
-              string exe = "", aumid = "";
-              using (var process = Process.GetProcessById((int)pid)) {
-                exe = process.ProcessName + ".exe";
-                try { uint length = 0; GetApplicationUserModelId(process.Handle, ref length, null); if (length > 0 && length < 4096) {
-                  var text = new StringBuilder((int)length); if (GetApplicationUserModelId(process.Handle, ref length, text) == 0) aumid = text.ToString();
-                } } catch { }
+              Check(endpoints.Item(index, out endpoint));
+              object obj; var iid = typeof(IManager).GUID;
+              Check(endpoint.Activate(ref iid, 23, IntPtr.Zero, out obj)); manager = (IManager)obj;
+              Check(manager.GetSessionEnumerator(out sessions));
+              int sessionCount; Check(sessions.GetCount(out sessionCount));
+              for (int i = 0; i < sessionCount; i++) {
+                IControl control = null;
+                try {
+                  Check(sessions.GetSession(i, out control));
+                  int status; Check(control.GetState(out status)); if (status == 2) continue;
+                  uint pid; Check(((IControl2)control).GetProcessId(out pid)); if (pid == 0) continue;
+                  string exe = "", aumid = "";
+                  using (var process = Process.GetProcessById((int)pid)) {
+                    exe = process.ProcessName + ".exe";
+                    try { uint length = 0; GetApplicationUserModelId(process.Handle, ref length, null); if (length > 0 && length < 4096) {
+                      var text = new StringBuilder((int)length); if (GetApplicationUserModelId(process.Handle, ref length, text) == 0) aumid = text.ToString();
+                    } } catch { }
+                  }
+                  if (!Matches(target, exe, aumid)) continue;
+                  volumes.Add((IVolume)control); controls.Add(control); control = null;
+                } catch { } finally { Release(control); }
               }
-              if (!Matches(target, exe, aumid)) continue;
-              volumes.Add((IVolume)control); controls.Add(control); control = null;
-            } catch { } finally { Release(control); }
+            } catch { } finally { Release(sessions); Release(manager); Release(endpoint); }
           }
-        } finally { Release(sessions); }
+        } finally { Release(endpoints); }
       } catch { ResetDevice(); }
     }
     public bool Peak(out float value) {
@@ -154,7 +159,7 @@ namespace LibertyAudio {
           if (meter.GetPeakValue(out peak) < 0) continue;
           available = true;
           if (((IVolume)control).GetMute(out muted) < 0 || muted || ((IVolume)control).GetMasterVolume(out volume) < 0) continue;
-          value = Math.Max(value, Math.Max(0, Math.Min(1, peak * volume)));
+          if (volume > 0) value = Math.Max(value, Math.Max(0, Math.Min(1, peak)));
         } catch { }
       }
       return available;

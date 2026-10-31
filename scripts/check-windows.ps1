@@ -4,6 +4,8 @@ $tokens = $null
 $errors = $null
 $null = [System.Management.Automation.Language.Parser]::ParseFile($bridge, [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw ($errors | Out-String) }
+& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'check-session-registry.ps1')
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'check-audio.ps1')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & node (Join-Path $PSScriptRoot 'check-audio-bridge.cjs')

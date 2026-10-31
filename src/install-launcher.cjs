@@ -19,7 +19,7 @@ async function launchPortableInstaller({ directory, script, target, update, wait
   let child;
   try {
     const executable = powershell || path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-    child = spawn(executable, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', helper, '-TargetPath', target, '-NewTargetPath', destination, '-UpdatePath', update.filename, '-ExpectedSha256', update.sha256, '-WaitPid', String(waitPid), '-StatusPath', statusPath, '-ReadyPath', readyPath, '-ReadyToken', token], { cwd: directory, detached: true, windowsHide: true, stdio: ['ignore', log, log] });
+    child = spawn(executable, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', helper, '-TargetPath', target, '-NewTargetPath', destination, '-UpdatePath', update.filename, '-ExpectedSha256', update.sha256, '-WaitPid', String(waitPid), '-StatusPath', statusPath, '-ReadyPath', readyPath, '-ReadyToken', token], { cwd: directory, detached: process.platform !== 'win32', windowsHide: true, stdio: ['ignore', log, log] });
   } catch {
     const error = new Error('Не удалось создать процесс установщика Windows. Приложение остаётся открытым');
     await fs.promises.writeFile(statusPath, JSON.stringify({ ok: false, phase: 'launch-failed', error: error.message, at: Date.now() })).catch(() => {});

@@ -5,6 +5,7 @@ class MediaHub extends EventEmitter {
   constructor(native, browser) {
     super(); this.native = native; this.browser = browser; this.nativeState = { ...EMPTY_STATE }; this.selection = 'auto'; this.autoId = null; this.startedAt = new Map(); this.lastPlaying = new Map(); this.requestedNative = null;
     native?.on('state', state => { this.nativeState = state; this.refresh(); });
+    native?.on('bridge-started', () => { this.requestedNative = null; this.reconnecting = this.selection.startsWith('native:') && !!this.lastSelected?.appId; });
     browser.on('change', () => this.refresh());
   }
   start() { this.native?.start(); this.refresh(); }
@@ -16,6 +17,10 @@ class MediaHub extends EventEmitter {
   }
   refresh() {
     const available = this.available();
+    if (this.reconnecting && this.lastSelected?.appId) {
+      const candidates = available.filter(item => item.source.id.startsWith('native:') && item.source.appId.toLowerCase() === this.lastSelected.appId.toLowerCase());
+      if (candidates.length === 1) { this.selection = candidates[0].source.id; this.lastSelected = candidates[0].source; this.reconnecting = false; }
+    }
     const ids = new Set(available.map(s => s.source.id));
     for (const item of available) {
       const id = item.source.id;
@@ -40,6 +45,7 @@ class MediaHub extends EventEmitter {
   async selectSource(id) {
     if (id !== 'auto' && !this.available().some(s => s.source.id === id)) throw new Error('Источник уже закрыт');
     this.lastSelected = this.available().find(s => s.source.id === id)?.source || null;
+    this.reconnecting = false;
     this.selection = id; this.refresh();
   }
   async command(command, value) {

@@ -20,7 +20,7 @@ async function fixture(run) {
 test('installer launch waits for matching staging acknowledgement and names the new executable in the same folder', async () => fixture(async options => {
   const child = new Child(); let released = false;
   const promise = launchPortableInstaller({ ...options, spawn: (command, args, spawnOptions) => {
-    assert.equal(command, 'test-powershell'); assert.equal(spawnOptions.cwd, options.directory); assert.equal(spawnOptions.detached, true);
+    assert.equal(command, 'test-powershell'); assert.equal(spawnOptions.cwd, options.directory); assert.equal(spawnOptions.detached, process.platform !== 'win32');
     const value = key => args[args.indexOf(key) + 1];
     assert.equal(value('-NewTargetPath'), path.join(options.directory, 'Liberty-Wave-0.6.1-Windows.exe'));
     assert.equal(value('-TargetPath'), options.target);
