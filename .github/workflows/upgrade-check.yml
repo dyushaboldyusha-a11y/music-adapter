@@ -1,0 +1,29 @@
+name: Liberty Wave — five portable upgrades
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  upgrade:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Test five actual upgrades from 0.6.1 to 0.6.2
+        run: node scripts/check-portable-upgrade.cjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Liberty-Wave-five-upgrades
+          path: |
+            artifacts/upgrade-061-062/results.json
+            artifacts/upgrade-061-062/*.png
+            artifacts/upgrade-061-062/*.log
+          if-no-files-found: error
