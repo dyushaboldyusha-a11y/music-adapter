@@ -186,11 +186,10 @@ async function start() {
   controls = new ControlWindow({ BrowserWindow, ipcMain, screen, icon: nativeImage.createFromPath(ICON_PATH), getState: controlSnapshot, action: controlAction, getBounds: () => settings.controlBounds, saveBounds: value => { settings.controlBounds = value; save(); }, onBlur: endControlCapture });
   const initial = layoutForDisplays(settings[boundsKey()], screen.getAllDisplays(), settings.scale, widgetSize(settings), preferences(settings));
   effectiveScale = initial.scale;
-  window = new BrowserWindow({ ...initial.bounds, title: APP_NAME, icon: nativeImage.createFromPath(ICON_PATH), transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
+  window = new BrowserWindow({ ...initial.bounds, title: APP_NAME, icon: nativeImage.createFromPath(ICON_PATH), transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false, zoomFactor: effectiveScale } });
   window.setAlwaysOnTop(true, 'screen-saver');
   window.removeMenu();
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  window.webContents.setZoomFactor(effectiveScale);
   window.on('move', () => { settings[boundsKey()] = window.getBounds(); save(); clearTimeout(snapTimer); snapTimer = setTimeout(() => { if (window.isDestroyed()) return; const before = window.getBounds(), after = snapBounds(before, screen.getAllDisplays(), preferences(settings)); if (before.x !== after.x || before.y !== after.y) window.setBounds(after); }, 180); });
   visibility = new AutoHide(hidden => { clearTimeout(fadeTimer); if (hidden) { publish(); fadeTimer = setTimeout(() => { if (visibility.hidden && !window.isDestroyed()) window.hide(); }, 250); } else { window.showInactive(); publish(); } });
   placement = watchDisplays(window, screen, { getScale: () => preferences(settings).scale, getPreferences: () => preferences(settings), shouldShow: () => !visibility.hidden, getSize: () => widgetSize(settings), onLayout: layout => {
@@ -214,8 +213,8 @@ async function start() {
   interaction = !shortcuts.snapshot().available.toggleInteraction || demo;
   updateTray();
   await window.loadFile(path.join(__dirname, 'renderer/index.html'));
-  // Navigation resets Chromium's zoom. Restore it before showing the pinned
-  // widget, which does not run the layout restoration used by editing mode.
+  // Recheck bounds after loading in case monitor metrics changed. The initial
+  // zoom is set at construction so the first renderer frame is scaled too.
   placement.restore();
   setInteraction(interaction);
   browserBridge = new BrowserBridge({ port: demo ? 0 : 16837, dataFile: path.join(app.getPath('userData'), 'browser-connections.json') });
