@@ -40,10 +40,10 @@ class BrowserBridge extends EventEmitter {
     if (request.method === 'OPTIONS') {
       response.writeHead(204, { 'Access-Control-Allow-Origin': origin || 'null', 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'content-type,authorization', 'Access-Control-Max-Age': '300' }); response.end(); return;
     }
-    if (request.method !== 'POST' || !['/v1/pair', '/v1/sync'].includes(request.url)) return send(404, { error: 'Not found' });
+    if (request.method !== 'POST' || !['/v1/pair', '/v1/sync', '/v1/level'].includes(request.url)) return send(404, { error: 'Not found' });
     try {
       let size = 0, chunks = [];
-      for await (const chunk of request) { size += chunk.length; if (size > (request.url === '/v1/pair' ? 8192 : 12000000)) { send(413, { error: 'Body too large' }); return; } chunks.push(chunk); }
+      for await (const chunk of request) { size += chunk.length; if (size > (request.url === '/v1/sync' ? 12000000 : 8192)) { send(413, { error: 'Body too large' }); return; } chunks.push(chunk); }
       let body;
       try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return send(400, { error: 'Invalid JSON' }); }
       if (request.url === '/v1/pair') {
@@ -59,6 +59,14 @@ class BrowserBridge extends EventEmitter {
       const client = this.clients.get(body.clientId);
       const tokenHash = hash(String(request.headers.authorization || '').replace(/^Bearer /, ''));
       if (!client || !crypto.timingSafeEqual(Buffer.from(client.hash, 'hex'), Buffer.from(tokenHash, 'hex'))) return send(401, { error: 'Подключите расширение заново' });
+      if (request.url === '/v1/level') {
+        const id = `web:${client.id}:${body.tabId}`, player = this.players.get(id);
+        if (!Number.isSafeInteger(body.tabId) || !player || Date.now() - player.seen > 8000 || typeof body.available !== 'boolean' || !Number.isFinite(body.level) || body.level < 0 || body.level > 1) return send(400, { error: 'Invalid audio source' });
+        if (Date.now() - (client.lastLevel || 0) < 20) return send(429, { error: 'Audio updates too frequent' });
+        client.lastLevel = Date.now();
+        this.emit('level', { sourceId: id, available: body.available, level: body.available ? body.level : 0 });
+        return send(200, { ok: true });
+      }
       if (!Array.isArray(body.sources) || body.sources.length > 16 || !Array.isArray(body.results || [])) return send(400, { error: 'Invalid sources' });
       const alive = new Set();
       for (const entry of body.sources) {

@@ -13,11 +13,14 @@ function update(next) {
   state = next; playbackClock.update(next);
   document.body.classList.toggle('compact', state.compact === true);
   audioWave.update(state.preferences);
-  LibertyTheme.apply(state.preferences?.color || LibertyTheme.DEFAULT_COLOR);
+  LibertyTheme.apply(state.effectiveColor || state.preferences?.color || LibertyTheme.DEFAULT_COLOR);
+  document.body.classList.toggle('auto-hidden', state.autoHidden === true);
+  for (const [key, className] of [['showArtwork', 'no-artwork'], ['showArtist', 'no-artist'], ['showTime', 'no-time']]) document.body.classList.toggle(className, state.preferences?.[key] === false);
+  document.querySelector('.signature').textContent = state.preferences?.nickname || 'Liberty';
   document.documentElement.style.setProperty('--decoration-opacity', String(state.preferences?.opacity ?? 1));
   document.body.classList.toggle('locked', !state.interaction);
   document.body.classList.toggle('connected', !!state.connected);
-  $('widget').inert = !state.interaction;
+  $('widget').inert = !state.interaction || state.autoHidden;
   document.querySelector('.widget-footer').inert = !state.interaction;
   if (!state.interaction) { document.activeElement?.blur(); }
   document.title = `Liberty Wave${state.source ? ' · ' + sourceLabel(state.source) : ''}`;

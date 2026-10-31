@@ -3,6 +3,7 @@ let state, page = 'home', noticeTimer, currentArtwork, sourceKey = '', seeking =
 const editingRanges = new Set(), clock = new LibertyPlaybackClock();
 const theme = LibertyControlTheme.create(action, () => page === 'appearance');
 const shortcuts = LibertyControlShortcuts.create(action);
+const personalization = LibertyPersonalization.create(action);
 const services = [['yandex', 'Яндекс Музыка', 'Я', '#ffcc33'], ['spotify', 'Spotify', 'S', '#3cd980'], ['soundcloud', 'SoundCloud', '☁', '#ff9445'], ['youtube', 'YouTube', '▶', '#ff626b'], ['vk', 'VK Музыка', 'VK', '#68a5ff']];
 const time = value => { const s = Math.floor(Math.max(0, value || 0)); return s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 function message(text, error = false) { clearTimeout(noticeTimer); $('notice').textContent = text; $('notice').hidden = !text; $('notice').classList.toggle('error', error); noticeTimer = setTimeout(() => { $('notice').hidden = true; }, error ? 9000 : 3500); }
@@ -84,7 +85,7 @@ function updateUpdates() {
 function update(next) {
   if (!next) return;
   if (state?.source?.id !== next.source?.id) { seeking = false; editingRanges.delete('volume'); }
-  state = next; clock.update(state); theme.update(state); shortcuts.update(state);
+  state = next; clock.update(state); theme.update(state); shortcuts.update(state); personalization.update(state);
   $('version').textContent = state.version; $('mode-badge').textContent = state.interaction ? 'Управление включено' : 'Закреплён'; $('mode-badge').classList.toggle('editable', state.interaction);
   $('interaction').checked = state.interaction; $('compact').checked = state.preferences.compact;
   $('interaction-description').textContent = state.interaction ? 'Виджет можно перемещать и нажимать его кнопки' : 'Клики проходят сквозь виджет';
@@ -102,7 +103,7 @@ function update(next) {
   setRange('volume', Math.round((state.volume || 0) * 100)); if (!editingRanges.has('volume')) $('volume-value').textContent = `${$('volume').value}%`;
   for (const [id, key] of preferences) { setRange(id, Math.round(state.preferences[key] * 100)); if (!editingRanges.has(id)) $(`${id}-value`).textContent = `${$(id).value}%`; }
   $('wave-mode').value = state.preferences.waveMode; $('wave-economy').checked = state.preferences.waveEconomy;
-  $('wave-note').textContent = state.platform === 'win32' && !state.demo ? 'Реакция на весь звук устройства вывода Windows. Микрофон не используется.' : 'Реакция на звук доступна в Windows. Здесь можно выбрать плавную волну.';
+  $('wave-note').textContent = state.source?.kind === 'browser' ? 'Только звук выбранной вкладки. В расширении нажмите «Волна этой вкладки» на музыкальной странице. Микрофон не используется.' : 'Только аудиосессии выбранного музыкального приложения Windows. Звук игр и Discord не учитывается. Если источник недоступен, волна затухает.';
   $('pair-browser').disabled = !state.browserAvailable; $('browser-status').textContent = state.pairedBrowsers ? `Подключено браузеров: ${state.pairedBrowsers}` : 'Браузер ещё не подключён'; $('revoke').hidden = !state.pairedBrowsers;
   $('pairing').hidden = !state.pairing; $('pair-code').textContent = state.pairing?.code || '';
   updateSources(); updateUpdates(); paint();

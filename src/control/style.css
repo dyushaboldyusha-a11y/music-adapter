@@ -2,6 +2,11 @@
 * { box-sizing: border-box; }
 body { margin: 0; color: var(--text); background: var(--bg); font-size: 13px; user-select: none; }
 [hidden] { display: none !important; }
+.personal-card { padding: 20px; }
+.personal-card label { display: block; margin-bottom: 10px; color: var(--muted); }
+.personal-card input { min-width: 0; width: 180px; }
+input[type="number"] { max-width: 90px; padding: 9px; background: #303034; border: 1px solid #ffffff12; color: var(--text); border-radius: 8px; }
+.setting-row select { max-width: 52%; }
 button, input, select { font: inherit; }
 button, input, select, a { -webkit-app-region: no-drag; }
 button { color: inherit; background: #303034; border: 1px solid #ffffff0c; border-radius: 9px; padding: 9px 14px; cursor: pointer; transition: background .15s, border-color .15s; }

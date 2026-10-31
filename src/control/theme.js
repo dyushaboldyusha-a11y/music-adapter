@@ -1,11 +1,11 @@
 (function (root) {
   function create(action, active) {
     const api = LibertyTheme, $ = id => document.getElementById(id), wheel = $('color-wheel');
-    let saved = api.DEFAULT_COLOR, draft = saved, hsv = api.toHsv(saved), dirty = false, busy = false;
+    let saved = api.DEFAULT_COLOR, draft = saved, hsv = api.toHsv(saved), dirty = false, busy = false, effective = saved;
     const presets = [['#ff3045', 'Красный'], ['#ff9f30', 'Оранжевый'], ['#22c55e', 'Зелёный'], ['#22d3ee', 'Голубой'], ['#438bff', 'Синий'], ['#a855f7', 'Фиолетовый'], ['#ec4899', 'Розовый'], ['#d4d4d8', 'Серый']];
     function render() {
       draft = api.fromHsv(hsv); dirty = draft !== saved;
-      api.apply(active() ? draft : saved);
+      api.apply(active() && dirty ? draft : effective);
       $('color-hex').value = draft; $('brightness').value = Math.round(hsv.v * 100); $('brightness-value').textContent = `${$('brightness').value}%`;
       const angle = hsv.h * Math.PI / 180;
       $('wheel-marker').style.left = `${50 + Math.cos(angle) * hsv.s * 48}%`; $('wheel-marker').style.top = `${50 + Math.sin(angle) * hsv.s * 48}%`;
@@ -40,13 +40,14 @@
     $('color-cancel').addEventListener('click', () => select(saved));
     $('color-save').addEventListener('click', async () => {
       if (busy) return; busy = true; render();
-      try { const result = await action('preferences', { color: draft }); if (result.ok) { saved = draft; render(); } }
+      try { const result = await action('preferences', { color: draft, colorMode: 'manual' }); if (result.ok) { saved = draft; render(); } }
       finally { busy = false; render(); }
     });
     return { update(state) {
+      effective = state.effectiveColor || state.preferences.color;
       const color = state.preferences.color;
       if (color !== saved) { saved = color; if (!dirty || draft === color) select(saved); }
-      api.apply(active() ? draft : saved);
+      api.apply(active() && dirty ? draft : effective);
     }, leave() { select(saved); }, render };
   }
   root.LibertyControlTheme = { create };

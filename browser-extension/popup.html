@@ -1,5 +1,5 @@
 <!doctype html><html lang="ru"><head><meta charset="utf-8"><link rel="stylesheet" href="popup.css"><title>Liberty Wave</title></head>
 <body><h1>Liberty Wave</h1><p id="status">Проверяю подключение…</p>
-<form id="pair"><label for="code">Код из меню виджета<br>«Подключить браузер»</label><input id="code" maxlength="8" autocomplete="off" spellcheck="false" placeholder="A1B2C3D4" required><button>Подключить</button></form>
+<form id="pair"><label for="code">Код из Liberty Wave<br>«Источники» → «Создать код»</label><input id="code" maxlength="8" autocomplete="off" spellcheck="false" placeholder="A1B2C3D4" required><button>Подключить</button></form>
 <p class="help">После подключения обновите вкладку с музыкой и включите трек. Источник появится в виджете.</p>
-<button id="disconnect" class="secondary" hidden>Отключить браузер</button><script src="popup.js"></script></body></html>
+<button id="wave-start" hidden>Волна этой вкладки</button><button id="wave-stop" class="secondary" hidden>Остановить волну вкладки</button><p id="wave-help" class="help" hidden>Откройте музыкальную вкладку и включите её волну. Учитывается только её звук; микрофон не используется.</p><button id="disconnect" class="secondary" hidden>Отключить браузер</button><script src="popup.js"></script></body></html>

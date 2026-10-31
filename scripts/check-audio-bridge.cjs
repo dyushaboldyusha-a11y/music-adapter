@@ -17,7 +17,7 @@ function wait(event, predicate, timeout = 15000) {
     const level = wait('level', value => typeof value.available === 'boolean' && Number.isFinite(value.level));
     audio.configure({ target, enabled: true, economy: true });
     const state = await selected; assert.equal(state.available, false); assert.equal(state.volume, null);
-    const sample = await level; assert.ok(sample.level >= 0 && sample.level <= 1);
+    const sample = await level; assert.ok(sample.level >= 0 && sample.level <= 1); assert.equal(sample.target, target); assert.equal(sample.available, false); assert.equal(sample.level, 0);
     await assert.rejects(audio.command('volume', .25, target));
     await assert.rejects(audio.command('mute', true, 'Other-Player.exe'));
     audio.configure({ target: '', enabled: false, economy: false });

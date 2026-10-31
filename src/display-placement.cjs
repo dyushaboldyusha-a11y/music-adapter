@@ -2,18 +2,18 @@ const { layoutForDisplays } = require('./window-state.cjs');
 
 // Display coordinates are Electron DIPs, including when Windows changes DPI or
 // a game switches the physical display mode. Never mix them with raw pixels.
-function watchDisplays(window, screen, { getScale, getSize, onLayout, delay = 150 }) {
+function watchDisplays(window, screen, { getScale, getSize, getPreferences, shouldShow = () => true, onLayout, delay = 150 }) {
   let timer;
   let disposed = false;
   function restore(reset = false, saved = window.getBounds()) {
     if (disposed || window.isDestroyed()) return;
     const displays = reset ? [screen.getPrimaryDisplay()] : screen.getAllDisplays();
     if (!displays.length) return;
-    const layout = layoutForDisplays(reset ? null : saved, displays, getScale(), getSize?.());
+    const layout = layoutForDisplays(reset ? null : saved, displays, getScale(), getSize?.(), getPreferences?.());
     window.setBounds(layout.bounds);
     window.webContents.setZoomFactor(layout.scale);
     window.setAlwaysOnTop(true, 'screen-saver');
-    if (!window.isVisible()) window.showInactive();
+    if (!window.isVisible() && shouldShow()) window.showInactive();
     window.moveTop(); // Raise the widget without taking keyboard focus from a game.
     onLayout(layout);
     return layout;

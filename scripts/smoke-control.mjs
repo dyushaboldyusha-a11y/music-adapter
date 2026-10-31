@@ -82,14 +82,14 @@ try {
   assert.equal((await panel.evaluate(() => libertyControl.getState())).shortcuts.bindings.next, '');
   const bytes = Buffer.alloc(256); bytes.write('MZ'); bytes.writeUInt32LE(128, 60); bytes.set([80, 69, 0, 0], 128);
   await app.evaluate(({ protocol }, fixture) => {
-    const base = 'https://github.com/dyushaboldyusha-a11y/music-adapter/releases/download/v0.6.0/', name = 'Liberty-Wave-0.6.0-Windows.exe';
+    const base = `https://github.com/dyushaboldyusha-a11y/music-adapter/releases/download/v${fixture.version}/`, name = `Liberty-Wave-${fixture.version}-Windows.exe`;
     protocol.handle('https', request => {
-      if (request.url.includes('/releases/latest')) return new Response(JSON.stringify({ tag_name: 'v0.6.0', assets: [name, 'SHA256SUMS.txt'].map(name => ({ name, state: 'uploaded', size: name.endsWith('.exe') ? fixture.bytes.length : 128, browser_download_url: base + name })) }));
+      if (request.url.includes('/releases/latest')) return new Response(JSON.stringify({ tag_name: `v${fixture.version}`, assets: [name, 'SHA256SUMS.txt'].map(name => ({ name, state: 'uploaded', size: name.endsWith('.exe') ? fixture.bytes.length : 128, browser_download_url: base + name })) }));
       if (request.url.endsWith('SHA256SUMS.txt')) return new Response(fixture.hash + '  ' + name + '\n');
       if (request.url === base + name) return new Response(new Uint8Array(fixture.bytes));
       return new Response('not found', { status: 404 });
     });
-  }, { bytes: [...bytes], hash: createHash('sha256').update(bytes).digest('hex') });
+  }, { bytes: [...bytes], hash: createHash('sha256').update(bytes).digest('hex'), version: `${Number(require('../package.json').version.split('.')[0]) + 1}.0.0` });
   await panel.locator('[data-page="updates"]').click(); await panel.locator('#update-check').click(); await waitState(panel, s => s.updates.phase === 'available');
   await panel.locator('#update-download').click(); await waitState(panel, s => s.updates.phase === 'ready');
   assert.equal(await panel.locator('#update-install').isDisabled(), true);

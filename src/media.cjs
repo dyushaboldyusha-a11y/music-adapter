@@ -33,7 +33,7 @@ class WindowsMedia extends EventEmitter {
       try {
         const message = JSON.parse(line.replace(/^\uFEFF/, ''));
         if (message.type === 'state') this.emit('state', this.normalize(message.state));
-        if (message.type === 'level') this.emit('level', { available: message.available === true, level: Number.isFinite(message.level) ? Math.max(0, Math.min(1, message.level)) : 0 });
+        if (message.type === 'level') this.emit('level', { target: typeof message.target === 'string' ? message.target.slice(0, 300) : '', available: message.available === true, level: Number.isFinite(message.level) ? Math.max(0, Math.min(1, message.level)) : 0 });
         if (message.type === 'result') {
           const pending = this.pending.get(message.id);
           if (pending) { clearTimeout(pending.timer); this.pending.delete(message.id); message.ok ? pending.resolve() : pending.reject(new Error(message.error || 'Приложение отклонило команду')); }

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, Tray, nativeImage, screen, shell, clipboard, net } = require('electron');
+const { app, BrowserWindow, globalShortcut, ipcMain, Tray, nativeImage, screen, shell, clipboard, net, dialog } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -7,14 +7,16 @@ const { AppUpdater } = require('./updater.cjs');
 const { createUpdateFetch } = require('./update-fetch.cjs');
 const { WindowsMedia, DemoMedia, EMPTY_STATE, validateCommand } = require('./media.cjs');
 const { WindowsAudio, VolumeQueue } = require('./audio.cjs');
-const { SIZE, COMPACT_SIZE, preferences, layoutForDisplays } = require('./window-state.cjs');
+const { SIZE, COMPACT_SIZE, DEFAULT_PREFERENCES, preferences, layoutForDisplays, snapBounds } = require('./window-state.cjs');
+const { validatePreferences, exportSettings, importSettings } = require('./customization.cjs');
+const { artworkColor } = require('./artwork-color.cjs');
+const { AutoHide } = require('./auto-hide.cjs');
 const { watchDisplays } = require('./display-placement.cjs');
 const { BrowserBridge } = require('./browser-bridge.cjs');
 const { MediaHub } = require('./media-hub.cjs');
 const { PROVIDERS } = require('./sources.cjs');
 const { ShortcutManager } = require('./shortcuts.cjs');
 const { format: formatShortcut } = require('./shared/shortcuts.js');
-const { normalizeColor } = require('./shared/theme.js');
 const APP_NAME = 'Liberty Wave';
 const ICON_PATH = path.join(__dirname, 'assets/liberty-wave.png');
 // The display name can change without moving preferences or paired browsers.
@@ -26,7 +28,7 @@ app.setPath('userData', profilePath);
 app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('io.musicadapter.widget');
 const demo = process.argv.includes('--demo');
-let controls, controlCapture = false;
+let controls, controlCapture = false, visibility, fadeTimer, snapTimer, cachedArtwork, artworkAccent;
 let window, tray, media, saveTimer, placement, browserBridge, shortcuts, updater, audio;
 let mediaState = { ...EMPTY_STATE }, audioLevel = { available: false, level: 0 };
 const volumeQueue = new VolumeQueue(() => state, mediaCommand);
@@ -40,7 +42,7 @@ else {
 }
 
 function publish() { if (window && !window.isDestroyed()) window.webContents.send('widget:state', snapshot()); controls?.publish(); }
-function snapshot() { return { ...state, interaction, compact: compactLayout(), audio: audioLevel, shortcuts: shortcuts?.snapshot(), updates: updater?.snapshot(), shortcutAvailable: shortcuts?.snapshot().available.toggleInteraction === true, demo, browserAvailable: browserBridge?.available === true, preferences: { ...preferences(settings), scale: effectiveScale }, platform: process.platform }; }
+function snapshot() { return { ...state, interaction, compact: compactLayout(), audio: audioLevel, autoHidden: visibility?.hidden === true, effectiveColor: settings.colorMode === 'artwork' ? artworkAccent || settings.color : settings.color, shortcuts: shortcuts?.snapshot(), updates: updater?.snapshot(), shortcutAvailable: shortcuts?.snapshot().available.toggleInteraction === true, demo, browserAvailable: browserBridge?.available === true, preferences: { ...preferences(settings), scale: effectiveScale }, platform: process.platform }; }
 function compactLayout() { return settings.compact === true; }
 function boundsKey() { return compactLayout() ? 'compactBounds' : 'bounds'; }
 function restoreLayout(reset = false) { return placement?.restore(reset, settings[boundsKey()] || window.getBounds()); }
@@ -48,12 +50,18 @@ function refreshState() {
   const native = mediaState.source?.id?.startsWith('native:') && mediaState.source?.kind === 'app';
   const matched = native && audio?.state.available && audio.state.target === mediaState.source?.appId;
   state = { ...mediaState, ...(native ? { volume: matched ? audio.state.volume : null, muted: matched && audio.state.muted, capabilities: { ...mediaState.capabilities, volume: !!matched, mute: !!matched } } : {}) };
+  if (cachedArtwork !== state.artwork) {
+    cachedArtwork = state.artwork; artworkAccent = null;
+    try { if (cachedArtwork) { const image = nativeImage.createFromDataURL(cachedArtwork).resize({ width: 40, height: 40 }); if (!image.isEmpty()) artworkAccent = artworkColor(image.toBitmap(), null); } } catch {}
+  }
   audio?.configure({ target: native && state.connected ? state.source.appId : '', enabled: settings.waveMode === 'audio' && settings.waveIntensity > 0, economy: settings.waveEconomy === true });
+  visibility?.update({ ...preferences(settings), playing: state.connected && state.playing, interaction });
   publish();
 }
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch (error) { console.error('Cannot save preferences', error.message); } }, 250); }
 function setInteraction(enabled, restore = true) {
   interaction = enabled;
+  visibility?.update({ ...preferences(settings), playing: state.connected && state.playing, interaction });
   window.setIgnoreMouseEvents(!enabled);
   window.setFocusable(enabled);
   if (enabled) { if (restore) placement?.restore(); window.show(); window.focus(); }
@@ -88,13 +96,10 @@ async function shortcutMediaCommand(command) {
   finally { shortcutCommandPending = false; }
 }
 function setPreferences(update) {
-  if (!update || typeof update !== 'object' || Array.isArray(update) || Object.keys(update).some(key => !['opacity', 'scale', 'color', 'compact', 'waveMode', 'waveIntensity', 'waveEconomy'].includes(key)) || Object.entries(update).some(([key, value]) => ['opacity', 'scale', 'waveIntensity'].includes(key) && !Number.isFinite(value))) throw new Error('Некорректные настройки');
-  if (Object.hasOwn(update, 'color')) normalizeColor(update.color);
-  for (const key of ['compact', 'waveEconomy']) if (Object.hasOwn(update, key) && typeof update[key] !== 'boolean') throw new Error('Некорректные настройки');
-  if (Object.hasOwn(update, 'waveMode') && !['audio', 'ambient', 'off'].includes(update.waveMode)) throw new Error('Некорректный режим волны');
+  validatePreferences(update, DEFAULT_PREFERENCES);
   const next = preferences({ ...preferences(settings), ...update });
   Object.assign(settings, next);
-  if (Object.hasOwn(update, 'compact') || Object.hasOwn(update, 'scale')) restoreLayout();
+  if (['compact', 'scale', 'monitor', 'edgeMargin'].some(key => Object.hasOwn(update, key))) restoreLayout();
   save(); refreshState();
   updateTray();
 }
@@ -108,7 +113,7 @@ async function openMusic(provider = state.source?.provider || 'yandex', nativeAp
   catch { return { ok: false, error: 'Откройте плеер самостоятельно' }; }
 }
 function controlSnapshot() {
-  return { ...snapshot(), preferences: preferences(settings), effectiveScale, version: app.getVersion(), pairedBrowsers: browserBridge?.clients.size || 0, pairing: browserBridge?.pairing || null, controlCapture };
+  return { ...snapshot(), preferences: preferences(settings), displays: screen.getAllDisplays().map((d, index) => ({ id: String(d.id), name: d.label || `Монитор ${index + 1}`, width: d.workArea.width, height: d.workArea.height })), effectiveScale, version: app.getVersion(), pairedBrowsers: browserBridge?.clients.size || 0, pairing: browserBridge?.pairing || null, controlCapture };
 }
 async function openControls(page = 'home') {
   if (!['home', 'sources', 'appearance', 'shortcuts', 'updates'].includes(page)) return { ok: false, error: 'Неизвестный раздел' };
@@ -121,6 +126,19 @@ function endControlCapture() {
 }
 async function controlAction(action, value) {
   switch (action) {
+    case 'export': {
+      const result = await dialog.showSaveDialog(controls.window, { title: 'Экспорт настроек Liberty Wave', defaultPath: 'Liberty-Wave-settings.json', filters: [{ name: 'Настройки JSON', extensions: ['json'] }] });
+      if (result.canceled || !result.filePath) return { ok: true, cancelled: true };
+      await fs.promises.writeFile(result.filePath, JSON.stringify(exportSettings(settings, preferences), null, 2), { mode: 0o600 }); return { ok: true };
+    }
+    case 'import': {
+      const result = await dialog.showOpenDialog(controls.window, { title: 'Импорт настроек Liberty Wave', properties: ['openFile'], filters: [{ name: 'Настройки JSON', extensions: ['json'] }] });
+      if (result.canceled || !result.filePaths[0]) return { ok: true, cancelled: true };
+      const file = result.filePaths[0]; if ((await fs.promises.stat(file)).size > 65536) throw new Error('Файл настроек слишком большой');
+      const next = importSettings(await fs.promises.readFile(file, 'utf8'), preferences, DEFAULT_PREFERENCES);
+      shortcuts.configure(next.shortcuts); Object.assign(settings, next); controlCapture = false;
+      save(); restoreLayout(); refreshState(); updateTray(); return { ok: true };
+    }
     case 'preferences': setPreferences(value); return { ok: true };
     case 'command': return mediaCommand(value?.command, value?.value);
     case 'source': return selectSource(value);
@@ -167,15 +185,16 @@ async function start() {
   } });
   updater.on('state', publish);
   controls = new ControlWindow({ BrowserWindow, ipcMain, screen, icon: nativeImage.createFromPath(ICON_PATH), getState: controlSnapshot, action: controlAction, getBounds: () => settings.controlBounds, saveBounds: value => { settings.controlBounds = value; save(); }, onBlur: endControlCapture });
-  const initial = layoutForDisplays(settings[boundsKey()], screen.getAllDisplays(), settings.scale, compactLayout() ? COMPACT_SIZE : SIZE);
+  const initial = layoutForDisplays(settings[boundsKey()], screen.getAllDisplays(), settings.scale, compactLayout() ? COMPACT_SIZE : SIZE, preferences(settings));
   effectiveScale = initial.scale;
   window = new BrowserWindow({ ...initial.bounds, title: APP_NAME, icon: nativeImage.createFromPath(ICON_PATH), transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   window.setAlwaysOnTop(true, 'screen-saver');
   window.removeMenu();
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   window.webContents.setZoomFactor(effectiveScale);
-  window.on('move', () => { settings[boundsKey()] = window.getBounds(); save(); });
-  placement = watchDisplays(window, screen, { getScale: () => preferences(settings).scale, getSize: () => compactLayout() ? COMPACT_SIZE : SIZE, onLayout: layout => {
+  window.on('move', () => { settings[boundsKey()] = window.getBounds(); save(); clearTimeout(snapTimer); snapTimer = setTimeout(() => { if (window.isDestroyed()) return; const before = window.getBounds(), after = snapBounds(before, screen.getAllDisplays(), preferences(settings)); if (before.x !== after.x || before.y !== after.y) window.setBounds(after); }, 180); });
+  visibility = new AutoHide(hidden => { clearTimeout(fadeTimer); if (hidden) { publish(); fadeTimer = setTimeout(() => { if (visibility.hidden && !window.isDestroyed()) window.hide(); }, 250); } else { window.showInactive(); publish(); } });
+  placement = watchDisplays(window, screen, { getScale: () => preferences(settings).scale, getPreferences: () => preferences(settings), shouldShow: () => !visibility.hidden, getSize: () => compactLayout() ? COMPACT_SIZE : SIZE, onLayout: layout => {
     effectiveScale = layout.scale; settings[boundsKey()] = layout.bounds; save(); publish();
   } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -206,14 +225,16 @@ async function start() {
     audio = new WindowsAudio(app.isPackaged ? path.join(process.resourcesPath, 'native/windows-audio.ps1') : path.join(__dirname, '../native/windows-audio.ps1'));
     let previousAudioState = '';
     audio.on('state', value => { const key = JSON.stringify(value); if (key !== previousAudioState) { previousAudioState = key; refreshState(); } });
-    audio.on('level', value => { audioLevel = value; if (window && !window.isDestroyed()) window.webContents.send('widget:audio-level', value); });
+    audio.on('level', value => { if (state.source?.kind === 'app' && state.source?.appId === value.target) sendAudioLevel(value); });
     audio.start();
   }
-  media.on('state', value => { const changed = JSON.stringify([value.connected, value.selection, value.sources?.map(s => [s.id,s.title])]) !== JSON.stringify([state.connected, state.selection, state.sources?.map(s => [s.id,s.title])]); mediaState = value; refreshState(); if (changed) updateTray(); });
+  media.on('state', value => { const changed = JSON.stringify([value.connected, value.selection, value.sources?.map(s => [s.id,s.title])]) !== JSON.stringify([state.connected, state.selection, state.sources?.map(s => [s.id,s.title])]); if (value.source?.id !== state.source?.id || !value.playing) sendAudioLevel({ available: false, level: 0 }); mediaState = value; refreshState(); if (changed) updateTray(); });
+  browserBridge.on('level', value => { if (value.sourceId === state.source?.id) sendAudioLevel(value); });
   browserBridge.on('change', () => controls.publish());
   media.start();
   updateTray();
   if (!demo && !process.argv.includes('--widget-only')) await openControls();
 }
-app.on('before-quit', () => { controls?.dispose(); updater?.stop(); placement?.dispose(); clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings[boundsKey()] = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } audio?.stop(); media?.stop(); browserBridge?.stop(); shortcuts?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
+function sendAudioLevel(value) { audioLevel = state.playing ? value : { available: false, level: 0 }; if (window && !window.isDestroyed()) window.webContents.send('widget:audio-level', audioLevel); }
+app.on('before-quit', () => { controls?.dispose(); updater?.stop(); placement?.dispose(); visibility?.dispose(); clearTimeout(fadeTimer); clearTimeout(snapTimer); clearTimeout(saveTimer); if (window && !window.isDestroyed()) { settings[boundsKey()] = window.getBounds(); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } audio?.stop(); media?.stop(); browserBridge?.stop(); shortcuts?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
 app.on('window-all-closed', () => app.quit());

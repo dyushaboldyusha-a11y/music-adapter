@@ -18,6 +18,7 @@ if ($env:OS -eq 'Windows_NT') {
         $state = $output.Read()
         if ($state.available -or $null -ne $state.volume) { throw 'An unavailable app must not expose volume controls.' }
         $peak = [float]0; $available = $output.Peak([ref]$peak)
+        if ($available -or $peak -ne 0) { throw 'A missing music source must never expose the mixed device audio.' }
         if ([float]::IsNaN($peak) -or $peak -lt 0 -or $peak -gt 1) { throw 'Invalid output peak.' }
         $rejected = $false
         try { $output.Volume([float]0.25) } catch { $rejected = $true }

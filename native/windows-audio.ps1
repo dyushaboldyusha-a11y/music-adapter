@@ -4,7 +4,7 @@ $ProgressPreference = 'SilentlyContinue'
 [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 
-# Core Audio reads the output peak without recording audio or opening a microphone.
+# Core Audio reads only the selected application's sessions, never the output mix.
 # Volume writes only touch sessions whose executable/AUMID exactly matches GSMTC.
 Add-Type -TypeDefinition @'
 using System;
@@ -83,7 +83,6 @@ namespace LibertyAudio {
     [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] static extern int GetApplicationUserModelId(IntPtr process, ref uint length, StringBuilder id);
     IDevices devices;
     IDevice device;
-    IMeter meter;
     IManager manager;
     string deviceId, target = "";
     DateTime refreshed = DateTime.MinValue;
@@ -108,7 +107,7 @@ namespace LibertyAudio {
     }
     public void Target(string value) { if (target != value) { target = value ?? ""; refreshed = DateTime.MinValue; ClearSessions(); } }
     void ClearSessions() { volumes.Clear(); foreach (var control in controls) Release(control); controls.Clear(); }
-    void ResetDevice() { ClearSessions(); Release(manager); Release(meter); Release(device); manager = null; meter = null; device = null; deviceId = null; }
+    void ResetDevice() { ClearSessions(); Release(manager); Release(device); manager = null; device = null; deviceId = null; }
     void Refresh() {
       if ((DateTime.UtcNow - refreshed).TotalMilliseconds < 1000) return;
       refreshed = DateTime.UtcNow;
@@ -118,8 +117,7 @@ namespace LibertyAudio {
         string id; Check(next.GetId(out id));
         if (deviceId != id) {
           ResetDevice(); device = next; deviceId = id;
-          object obj; var iid = typeof(IMeter).GUID; Check(device.Activate(ref iid, 23, IntPtr.Zero, out obj)); meter = (IMeter)obj;
-          iid = typeof(IManager).GUID; Check(device.Activate(ref iid, 23, IntPtr.Zero, out obj)); manager = (IManager)obj;
+          object obj; var iid = typeof(IManager).GUID; Check(device.Activate(ref iid, 23, IntPtr.Zero, out obj)); manager = (IManager)obj;
         } else Release(next);
         ClearSessions();
         if (String.IsNullOrEmpty(target)) return;
@@ -148,9 +146,18 @@ namespace LibertyAudio {
     }
     public bool Peak(out float value) {
       Refresh(); value = 0;
-      if (meter == null) return false;
-      if (meter.GetPeakValue(out value) < 0) { ResetDevice(); return false; }
-      return true;
+      bool available = false;
+      foreach (var control in controls) {
+        try {
+          float peak, volume; bool muted;
+          var meter = (IMeter)control;
+          if (meter.GetPeakValue(out peak) < 0) continue;
+          available = true;
+          if (((IVolume)control).GetMute(out muted) < 0 || muted || ((IVolume)control).GetMasterVolume(out volume) < 0) continue;
+          value = Math.Max(value, Math.Max(0, Math.Min(1, peak * volume)));
+        } catch { }
+      }
+      return available;
     }
     public Snapshot Read() {
       Refresh();
@@ -210,7 +217,7 @@ try {
         if ([LibertyAudio.Input]::Closed -and [LibertyAudio.Input]::Lines.IsEmpty) { break }
         if ($enabled) {
             $peak = [float]0; $available = $output.Peak([ref]$peak)
-            Send-Message @{ type = 'level'; available = $available; level = [double]$peak }
+            Send-Message @{ type = 'level'; target = $target; available = $available; level = [double]$peak }
         }
         if (([DateTime]::UtcNow - $lastState).TotalMilliseconds -ge 400) {
             Send-Message @{ type = 'state'; state = $output.Read() }; $lastState = [DateTime]::UtcNow
