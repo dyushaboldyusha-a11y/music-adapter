@@ -32,11 +32,11 @@ try {
   await panel.evaluate(() => libertyControl.action('interaction', false));
   browser = await chromium.launch({ channel: 'chromium', headless: false });
   const other = await browser.newPage(); await other.setContent('<h1>Focused game fixture</h1>'); await other.bringToFront();
-  await app.evaluate(({ BrowserWindow }) => { const contents = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('/renderer/index.html')).webContents; globalThis.waveFixInterval = setInterval(() => contents.send('widget:audio-level', { available: true, level: .008 }), 40); });
-  const contours = new Set();
-  for (let i = 0; i < 12; i++) { await widget.waitForTimeout(90); contours.add(await widget.locator('#edge-wave-ring').getAttribute('d')); }
+  await app.evaluate(({ BrowserWindow }) => { const contents = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('/renderer/index.html')).webContents; let sample = 0; globalThis.waveFixInterval = setInterval(() => contents.send('widget:audio-level', { available: true, level: ++sample % 8 < 2 ? .012 : .002 }), 40); });
+  const contours = new Set(); let maximumGlow = 0;
+  for (let i = 0; i < 12; i++) { await widget.waitForTimeout(90); contours.add(await widget.locator('#edge-wave-ring').getAttribute('d')); maximumGlow = Math.max(maximumGlow, await widget.locator('.wave-glow').evaluate(el => parseFloat(el.style.strokeWidth))); }
   assert.ok(contours.size >= 6, 'Quiet music must keep the pinned wave moving with another app focused');
-  assert.ok(await widget.locator('.wave-glow').evaluate(el => parseFloat(el.style.strokeWidth) > 3.4));
+  assert.ok(maximumGlow > 3.4);
   assert.equal(await other.evaluate(() => document.hasFocus()), true);
   await app.evaluate(({ BrowserWindow }) => { clearInterval(globalThis.waveFixInterval); BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('/renderer/index.html')).webContents.send('widget:audio-level', { available: false, level: 0 }); });
   await widget.waitForTimeout(1800); assert.equal(await widget.locator('#edge-wave-ring').getAttribute('d'), idle);

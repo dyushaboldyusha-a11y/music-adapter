@@ -126,3 +126,12 @@ body.compact .volume-row output { display: none; }
 body.compact .widget-footer { height: 28px; padding-top: 6px; }
 body.compact #key-hint, body.compact .mode-hint svg { display: none; }
 body.compact .more { margin-top: 0; width: 19px; height: 25px; flex-shrink: 0; }
+
+/* Music effects keep the controls and drag regions in their original layout. */
+.cover { transform: scale(var(--cover-scale, 1)); transform-origin: center; }
+.beat-frame { position: absolute; inset: -1px; border: 1px solid var(--red); border-radius: inherit; pointer-events: none; opacity: calc(var(--beat-strength, 0) * var(--decoration-opacity, 1)); box-shadow: 0 0 18px var(--red), inset 0 0 10px color-mix(in srgb, var(--red) 35%, transparent); }
+body.has-rhythm-bars .widget { height: 232px; }
+.music-rhythm { position: absolute; left: 23px; right: 23px; bottom: 9px; height: 20px; display: flex; gap: 4px; pointer-events: none; opacity: var(--decoration-opacity, 1); }
+.music-rhythm i { flex: 1; min-width: 0; border-radius: 2px 2px 0 0; background: var(--red); transform: scaleY(0); transform-origin: bottom; }
+body.compact.has-rhythm-bars .widget { height: 100px; }
+body.compact .music-rhythm { left: 13px; right: 13px; bottom: 5px; height: 12px; gap: 3px; }

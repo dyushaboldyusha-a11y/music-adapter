@@ -72,6 +72,7 @@ jobs:
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:startup
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:features
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:wave-fixes
+      - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:music-effects
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:personalization
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:tab-wave
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:browser

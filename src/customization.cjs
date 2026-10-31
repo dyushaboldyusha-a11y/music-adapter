@@ -1,6 +1,6 @@
 const { normalizeColor } = require('./shared/theme.js');
 const { normalizeBindings } = require('./shared/shortcuts.js');
-const EXTRA_DEFAULTS = { nickname: 'Liberty', colorMode: 'manual', autoHide: false, autoHideDelay: 60, snapEnabled: false, edgeMargin: 16, monitor: 'auto', showArtwork: true, showArtist: true, showTime: true };
+const EXTRA_DEFAULTS = { nickname: 'Liberty', colorMode: 'manual', autoHide: false, autoHideDelay: 60, snapEnabled: false, edgeMargin: 16, monitor: 'auto', showArtwork: true, showArtist: true, showTime: true, coverPulse: false, rhythmBars: false, beatGlow: false };
 function nickname(value) {
   if (typeof value !== 'string') throw new Error('Введите никнейм');
   const text = value.normalize('NFC').trim();
@@ -10,7 +10,7 @@ function nickname(value) {
 function extras(input = {}) {
   const output = { ...EXTRA_DEFAULTS };
   try { if (input.nickname !== undefined) output.nickname = nickname(input.nickname); } catch {}
-  for (const key of ['autoHide', 'snapEnabled', 'showArtwork', 'showArtist', 'showTime']) if (typeof input[key] === 'boolean') output[key] = input[key];
+  for (const key of ['autoHide', 'snapEnabled', 'showArtwork', 'showArtist', 'showTime', 'coverPulse', 'rhythmBars', 'beatGlow']) if (typeof input[key] === 'boolean') output[key] = input[key];
   if (input.colorMode === 'artwork') output.colorMode = 'artwork';
   if (Number.isFinite(input.autoHideDelay)) output.autoHideDelay = Math.round(Math.max(5, Math.min(600, input.autoHideDelay)));
   if (Number.isFinite(input.edgeMargin)) output.edgeMargin = Math.round(Math.max(0, Math.min(100, input.edgeMargin)));

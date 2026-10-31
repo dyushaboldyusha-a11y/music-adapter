@@ -46,6 +46,7 @@ $('interaction').addEventListener('change', () => action('interaction', $('inter
 $('restore').addEventListener('click', () => action('restore'));
 $('wave-mode').addEventListener('change', () => action('preferences', { waveMode: $('wave-mode').value }));
 $('wave-economy').addEventListener('change', () => action('preferences', { waveEconomy: $('wave-economy').checked }));
+for (const [id, key] of [['cover-pulse', 'coverPulse'], ['rhythm-bars', 'rhythmBars'], ['beat-glow', 'beatGlow']]) $(id).addEventListener('change', () => action('preferences', { [key]: $(id).checked }));
 for (const id of ['source', 'home-source']) $(id).addEventListener('change', () => action('source', $(id).value));
 for (const [id, command] of [['play-pause', 'playPause'], ['next', 'next'], ['previous', 'previous']]) $(id).addEventListener('click', () => action('command', { command }));
 $('mute').addEventListener('click', () => action('command', { command: 'mute', value: !state.muted }));
@@ -103,6 +104,7 @@ function update(next) {
   setRange('volume', Math.round((state.volume || 0) * 100)); if (!editingRanges.has('volume')) $('volume-value').textContent = `${$('volume').value}%`;
   for (const [id, key] of preferences) { setRange(id, Math.round(state.preferences[key] * 100)); if (!editingRanges.has(id)) $(`${id}-value`).textContent = `${$(id).value}%`; }
   $('wave-mode').value = state.preferences.waveMode; $('wave-economy').checked = state.preferences.waveEconomy;
+  for (const [id, key] of [['cover-pulse', 'coverPulse'], ['rhythm-bars', 'rhythmBars'], ['beat-glow', 'beatGlow']]) $(id).checked = state.preferences[key] === true;
   $('pair-browser').disabled = !state.browserAvailable; $('browser-status').textContent = state.pairedBrowsers ? `Подключено браузеров: ${state.pairedBrowsers}` : 'Браузер ещё не подключён'; $('revoke').hidden = !state.pairedBrowsers;
   $('pairing').hidden = !state.pairing; $('pair-code').textContent = state.pairing?.code || '';
   updateSources(); updateUpdates(); paint();

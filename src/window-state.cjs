@@ -8,6 +8,10 @@ function preferences(input = {}) {
   try { if (input.color !== undefined) color = normalizeColor(input.color); } catch {}
   return { opacity: Number.isFinite(input.opacity) ? Math.max(.25, Math.min(1, input.opacity)) : 1, scale: Number.isFinite(input.scale) ? Math.max(.5, Math.min(1.75, input.scale)) : 1, color, compact: input.compact === true, waveMode: ['audio', 'ambient', 'off'].includes(input.waveMode) ? input.waveMode : 'audio', waveIntensity: Number.isFinite(input.waveIntensity) ? Math.max(0, Math.min(1, input.waveIntensity)) : .7, waveEconomy: input.waveEconomy === true, ...extras(input) };
 }
+function widgetSize(input = {}) {
+  const base = input.compact === true ? COMPACT_SIZE : SIZE;
+  return { ...base, height: base.height + (input.rhythmBars === true ? input.compact === true ? 20 : 30 : 0) };
+}
 function clampBounds(saved, displays, scale = 1, baseSize = SIZE) {
   const size = { width: Math.round(baseSize.width * scale), height: Math.round(baseSize.height * scale) };
   const area = (displays.find(d => saved && saved.x < d.workArea.x + d.workArea.width && saved.x + size.width > d.workArea.x && saved.y < d.workArea.y + d.workArea.height && saved.y + size.height > d.workArea.y) || displays[0]).workArea;
@@ -40,4 +44,4 @@ function snapBounds(bounds, displays, options = {}) {
   }
   return result;
 }
-module.exports = { SIZE, COMPACT_SIZE, DEFAULT_PREFERENCES, preferences, clampBounds, layoutForDisplays, snapBounds };
+module.exports = { SIZE, COMPACT_SIZE, DEFAULT_PREFERENCES, preferences, widgetSize, clampBounds, layoutForDisplays, snapBounds };

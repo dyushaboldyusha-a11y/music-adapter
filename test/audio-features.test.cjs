@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { WindowsAudio, normalizeAudio, VolumeQueue } = require('../src/audio.cjs');
 const { validateCommand, normalizeState } = require('../src/media.cjs');
 const { DEFAULT_PREFERENCES, preferences, COMPACT_SIZE, layoutForDisplays } = require('../src/window-state.cjs');
-const { ring, musicEnergy } = require('../src/renderer/audio-wave.js');
+const { ring } = require('../src/renderer/audio-wave.js');
 
 test('audio values and commands reject nonfinite, untyped or out-of-range input', () => {
   for (const value of [NaN, Infinity, -1, 1.01, '0.5', null]) assert.throws(() => validateCommand('volume', value));
@@ -64,11 +64,4 @@ test('audio wave remains one closed contour, settles in silence, and responds to
     assert.ok(d.startsWith('M') && d.endsWith('Z')); assert.ok(!d.includes('NaN'));
     assert.equal((d.match(/M/g) || []).length, 1);
   }
-});
-test('quiet real music produces visible motion while silence and invalid samples stay still', () => {
-  assert.equal(musicEnergy(0), 0); assert.equal(musicEnergy(NaN), 0); assert.equal(musicEnergy(Infinity), 0);
-  assert.equal(musicEnergy(-1), 0); assert.equal(musicEnergy(2), 1);
-  assert.ok(musicEnergy(.008) > .2);
-  assert.ok(musicEnergy(.04) > musicEnergy(.008));
-  assert.notEqual(ring(616, 234, 1, musicEnergy(.008), .7), ring(616, 234, 2, musicEnergy(.008), .7));
 });

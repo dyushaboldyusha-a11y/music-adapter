@@ -7,7 +7,7 @@ const { launchPortableInstaller } = require('./install-launcher.cjs');
 const { createUpdateFetch } = require('./update-fetch.cjs');
 const { WindowsMedia, DemoMedia, EMPTY_STATE, validateCommand } = require('./media.cjs');
 const { WindowsAudio, VolumeQueue } = require('./audio.cjs');
-const { SIZE, COMPACT_SIZE, DEFAULT_PREFERENCES, preferences, layoutForDisplays, snapBounds } = require('./window-state.cjs');
+const { widgetSize, DEFAULT_PREFERENCES, preferences, layoutForDisplays, snapBounds } = require('./window-state.cjs');
 const { validatePreferences, exportSettings, importSettings } = require('./customization.cjs');
 const { artworkColor } = require('./artwork-color.cjs');
 const { AutoHide } = require('./auto-hide.cjs');
@@ -54,7 +54,7 @@ function refreshState() {
     cachedArtwork = state.artwork; artworkAccent = null;
     try { if (cachedArtwork) { const image = nativeImage.createFromDataURL(cachedArtwork).resize({ width: 40, height: 40 }); if (!image.isEmpty()) artworkAccent = artworkColor(image.toBitmap(), null); } } catch {}
   }
-  audio?.configure({ target: native && state.connected ? state.source.appId : '', enabled: !!native && state.connected && state.playing && settings.waveMode === 'audio' && settings.waveIntensity > 0, economy: settings.waveEconomy === true });
+  audio?.configure({ target: native && state.connected ? state.source.appId : '', enabled: !!native && state.connected && state.playing && settings.waveIntensity > 0 && (settings.waveMode === 'audio' || settings.coverPulse || settings.rhythmBars || settings.beatGlow), economy: settings.waveEconomy === true });
   visibility?.update({ ...preferences(settings), playing: state.connected && state.playing, interaction });
   publish();
 }
@@ -99,7 +99,7 @@ function setPreferences(update) {
   validatePreferences(update, DEFAULT_PREFERENCES);
   const next = preferences({ ...preferences(settings), ...update });
   Object.assign(settings, next);
-  if (['compact', 'scale', 'monitor', 'edgeMargin'].some(key => Object.hasOwn(update, key))) restoreLayout();
+  if (['compact', 'scale', 'monitor', 'edgeMargin', 'rhythmBars'].some(key => Object.hasOwn(update, key))) restoreLayout();
   save(); refreshState();
   updateTray();
 }
@@ -184,7 +184,7 @@ async function start() {
   await updater.initialize().catch(error => updater.fail(error));
   updater.on('state', publish);
   controls = new ControlWindow({ BrowserWindow, ipcMain, screen, icon: nativeImage.createFromPath(ICON_PATH), getState: controlSnapshot, action: controlAction, getBounds: () => settings.controlBounds, saveBounds: value => { settings.controlBounds = value; save(); }, onBlur: endControlCapture });
-  const initial = layoutForDisplays(settings[boundsKey()], screen.getAllDisplays(), settings.scale, compactLayout() ? COMPACT_SIZE : SIZE, preferences(settings));
+  const initial = layoutForDisplays(settings[boundsKey()], screen.getAllDisplays(), settings.scale, widgetSize(settings), preferences(settings));
   effectiveScale = initial.scale;
   window = new BrowserWindow({ ...initial.bounds, title: APP_NAME, icon: nativeImage.createFromPath(ICON_PATH), transparent: true, frame: false, resizable: false, maximizable: false, fullscreenable: false, hasShadow: false, alwaysOnTop: true, skipTaskbar: true, show: false, backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false } });
   window.setAlwaysOnTop(true, 'screen-saver');
@@ -193,7 +193,7 @@ async function start() {
   window.webContents.setZoomFactor(effectiveScale);
   window.on('move', () => { settings[boundsKey()] = window.getBounds(); save(); clearTimeout(snapTimer); snapTimer = setTimeout(() => { if (window.isDestroyed()) return; const before = window.getBounds(), after = snapBounds(before, screen.getAllDisplays(), preferences(settings)); if (before.x !== after.x || before.y !== after.y) window.setBounds(after); }, 180); });
   visibility = new AutoHide(hidden => { clearTimeout(fadeTimer); if (hidden) { publish(); fadeTimer = setTimeout(() => { if (visibility.hidden && !window.isDestroyed()) window.hide(); }, 250); } else { window.showInactive(); publish(); } });
-  placement = watchDisplays(window, screen, { getScale: () => preferences(settings).scale, getPreferences: () => preferences(settings), shouldShow: () => !visibility.hidden, getSize: () => compactLayout() ? COMPACT_SIZE : SIZE, onLayout: layout => {
+  placement = watchDisplays(window, screen, { getScale: () => preferences(settings).scale, getPreferences: () => preferences(settings), shouldShow: () => !visibility.hidden, getSize: () => widgetSize(settings), onLayout: layout => {
     effectiveScale = layout.scale; settings[boundsKey()] = layout.bounds; save(); publish();
   } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
