@@ -81,9 +81,11 @@ async function download(panel) {
     { name: 'unicode-path', folder: 'Загрузки с пробелами', compact: false, scale: 1.25, color: '#22d3ee' },
     { name: 'cached-retry', compact: true, scale: .75, color: '#ffffff', retry: true }
   ];
+  const selected = process.env.UPGRADE_SCENARIO && process.env.UPGRADE_SCENARIO !== 'all' ? scenarios.filter(scenario => scenario.name === process.env.UPGRADE_SCENARIO) : scenarios;
+  assert.ok(selected.length, 'Unknown upgrade scenario');
   const writeReport = () => fs.writeFile(path.join(output, 'results.json'), JSON.stringify(report, null, 2));
   try {
-    for (const [index, scenario] of scenarios.entries()) {
+    for (const [index, scenario] of selected.entries()) {
       const result = { name: scenario.name, pass: false }; report.scenarios.push(result);
       let current, old;
       const directory = path.join(fixture, scenario.folder || scenario.name), target = path.join(directory, 'Liberty-Wave-0.6.1-Windows.exe'), replacement = path.join(directory, 'Liberty-Wave-0.6.2-Windows.exe');
@@ -95,6 +97,10 @@ async function download(panel) {
       const probe = async cleanup => {
         const response = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', helper, '-SpecPath', specPath, ...(cleanup ? ['-Cleanup'] : [])], { encoding: 'utf8', timeout: 30000 });
         return cleanup ? null : JSON.parse(response.stdout.replace(/^\uFEFF/, '').trim() || 'null');
+      };
+      const diagnostics = async () => {
+        const response = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', helper, '-SpecPath', specPath, '-Diagnostics'], { encoding: 'utf8', timeout: 30000 });
+        return JSON.parse(response.stdout.replace(/^\uFEFF/, '').trim());
       };
       const cache = path.join(profile, 'updates');
       const cachedExecutables = async () => (await fs.readdir(cache)).filter(name => /^Liberty-Wave-0\.6\.2-[a-f0-9-]+\.exe$/i.test(name));
@@ -113,6 +119,10 @@ async function download(panel) {
         }
         await current.panel.screenshot({ path: path.join(output, `${index + 1}-before-install.png`) });
         await current.panel.locator('#update-install').click();
+        await sleep(5000);
+        result.afterInstall = { ...await diagnostics(), launcherExitCode: current.child.exitCode, browserConnected: current.browser.isConnected(), status: await json(path.join(cache, 'last-install.json')) };
+        console.log('After install:', JSON.stringify(result.afterInstall));
+        if (!result.afterInstall.installerAlive && !result.afterInstall.status?.ok) throw Error('The installer process exited after readiness without completing replacement');
         const status = await poll('successful installation status', async () => {
           const value = await json(path.join(cache, 'last-install.json'));
           if (['failed', 'launch-failed'].includes(value?.phase)) throw Error(value.error);
@@ -156,7 +166,7 @@ async function download(panel) {
       }
     }
     report.complete = true; await writeReport();
-    assert.equal(report.scenarios.filter(item => item.pass).length, 5, 'Every portable upgrade must pass');
+    assert.equal(report.scenarios.filter(item => item.pass).length, selected.length, 'Every portable upgrade must pass');
   } finally {
     await writeReport(); await fs.rm(fixture, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
   }

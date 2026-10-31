@@ -1,8 +1,16 @@
-param([Parameter(Mandatory=$true)][string]$SpecPath, [switch]$Cleanup)
+param([Parameter(Mandatory=$true)][string]$SpecPath, [switch]$Cleanup, [switch]$Diagnostics)
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 $spec = Get-Content -LiteralPath $SpecPath -Raw -Encoding UTF8 | ConvertFrom-Json
 $all = @(Get-CimInstance Win32_Process)
+if ($Diagnostics) {
+    $ready = $null
+    try { $ready = Get-Content -LiteralPath (Join-Path $spec.profile 'updates/installer-ready.json') -Raw -Encoding UTF8 | ConvertFrom-Json } catch { }
+    $wrappers = @($all | Where-Object { $_.ExecutablePath -and $spec.paths -icontains $_.ExecutablePath })
+    $installer = @($all | Where-Object { $ready -and $_.ProcessId -eq $ready.pid })
+    @{ installerPid = $ready.pid; installerAlive = ($installer.Count -gt 0); wrappers = @($wrappers | Select-Object ProcessId, ParentProcessId, Name); applications = @($all | Where-Object { $_.Name -ieq 'Liberty Wave.exe' -and $_.CommandLine -notmatch '--type=' } | Select-Object ProcessId, ParentProcessId, ExecutablePath) } | ConvertTo-Json -Depth 5 -Compress
+    return
+}
 if ($Cleanup) {
     # Kill only these test launchers, their descendants and their installer.
     $ids = [Collections.Generic.HashSet[uint32]]::new()

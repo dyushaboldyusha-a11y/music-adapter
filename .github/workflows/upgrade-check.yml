@@ -1,6 +1,12 @@
 name: Liberty Wave — five portable upgrades
 on:
   workflow_dispatch:
+    inputs:
+      scenario:
+        description: Scenario selection for diagnostics
+        type: choice
+        default: all
+        options: [all, normal]
 permissions:
   contents: read
 jobs:
@@ -18,6 +24,7 @@ jobs:
         run: node scripts/check-portable-upgrade.cjs
         env:
           GH_TOKEN: ${{ github.token }}
+          UPGRADE_SCENARIO: ${{ inputs.scenario }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
