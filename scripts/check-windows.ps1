@@ -1,4 +1,6 @@
 $ErrorActionPreference = 'Stop'
+& node (Join-Path $PSScriptRoot 'check-detached-powershell.cjs')
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $bridge = Join-Path $PSScriptRoot '../native/windows-media.ps1'
 $tokens = $null
 $errors = $null
