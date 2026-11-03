@@ -145,8 +145,15 @@ public static class LibertyOfflineSpeech {
         return new Result { Text = "", Confidence = 0, Diagnostics = diagnostics };
     }
     static bool Plausible(Result constrained, Result unrestricted) {
-        string command = LibertyVoiceCatalog.Normalize(constrained.Text), heard = LibertyVoiceCatalog.Normalize(unrestricted.Text);
-        return unrestricted.Text.Split(new [] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length < 3 || LibertyVoiceCatalog.Similarity(command, heard) >= .4;
+        int heardWords = unrestricted.Text.Split(new [] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        int commandWords = constrained.Text.Split(new [] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length;
+        double similarity = LibertyVoiceCatalog.Similarity(constrained.Text, unrestricted.Text);
+        // Require stronger evidence for a short command when the full decoder
+        // hears a different phrase. In particular, foreign speech must not
+        // become "back" simply because the small command grammar favors it.
+        if (heardWords >= 3 && similarity < .4) return false;
+        if (commandWords == 1 && heardWords >= 2 && constrained.Confidence < .9f && similarity < .4) return false;
+        return true;
     }
     static Result RecognizeModel(IntPtr handle, byte[] grammar, byte[] wave, int start, int length) {
         IntPtr recognizer = grammar == null ? newRecognizer(handle, 16000) : newCommandRecognizer(handle, 16000, grammar);
