@@ -7,6 +7,7 @@
     [Parameter(Mandatory=$true)][string]$StatusPath,
     [string]$ReadyPath = '',
     [string]$ReadyToken = '',
+    [int]$HostPid = 0,
     [switch]$NoRelaunch,
     [ValidateRange(1,60)][int]$LockWaitSeconds = 30
 )
@@ -39,7 +40,7 @@ try {
     Write-InstallStatus 'ready' $false
     if ($ReadyPath) {
         if (-not $ReadyToken) { throw 'Missing installer handshake token.' }
-        $ready = @{ phase = 'ready'; token = $token; pid = $PID; sha256 = $ExpectedSha256 }
+        $ready = @{ phase = 'ready'; token = $token; pid = $PID; hostPid = $HostPid; sha256 = $ExpectedSha256 }
         [IO.File]::WriteAllText($ReadyPath, (ConvertTo-Json -InputObject $ready -Compress), [Text.UTF8Encoding]::new($true))
     }
     # Confirmed staging happens before the application is allowed to close.

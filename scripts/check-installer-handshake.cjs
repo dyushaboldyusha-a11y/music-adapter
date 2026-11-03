@@ -18,7 +18,7 @@ const { launchPortableInstaller } = require('../src/install-launcher.cjs');
   let child, extraParent;
   try {
     await fs.writeFile(target, 'previous application'); await fs.writeFile(update, bytes);
-    child = await launchPortableInstaller({ directory: cache, script: path.resolve(__dirname, '../native/install-update.ps1'), target, update: { filename: update, sha256, version: '0.6.1' }, waitPid: parent.pid, powershell: process.platform === 'win32' ? undefined : 'powershell.exe', spawn: (file, args, options) => spawn(file, [...args, '-NoRelaunch'], options) });
+    child = await launchPortableInstaller({ directory: cache, script: path.resolve(__dirname, '../native/install-update.ps1'), target, update: { filename: update, sha256, version: '0.6.1' }, waitPid: parent.pid, powershell: process.platform === 'win32' ? undefined : 'powershell.exe', noRelaunch: true });
     assert.equal(await fs.readFile(target, 'utf8'), 'previous application', 'Readiness must precede changing or closing the old app');
     await assert.rejects(fs.stat(replacement), { code: 'ENOENT' });
     const token = JSON.parse((await fs.readFile(path.join(cache, 'installer-ready.json'), 'utf8')).replace(/^\uFEFF/, '')).token;
@@ -33,13 +33,13 @@ const { launchPortableInstaller } = require('../src/install-launcher.cjs');
     assert.equal(result.ok, true); assert.equal(result.newPath, replacement);
     // A pre-existing unrelated destination must survive and the old app must not close.
     await fs.writeFile(target, 'previous application'); await fs.writeFile(replacement, 'unrelated existing file'); await fs.writeFile(update, bytes);
-    await assert.rejects(launchPortableInstaller({ directory: cache, script: path.resolve(__dirname, '../native/install-update.ps1'), target, update: { filename: update, sha256, version: '0.6.1' }, waitPid: process.pid, powershell: process.platform === 'win32' ? undefined : 'powershell.exe', spawn: (file, args, options) => spawn(file, [...args, '-NoRelaunch'], options) }), /different file already uses/);
+    await assert.rejects(launchPortableInstaller({ directory: cache, script: path.resolve(__dirname, '../native/install-update.ps1'), target, update: { filename: update, sha256, version: '0.6.1' }, waitPid: process.pid, powershell: process.platform === 'win32' ? undefined : 'powershell.exe', noRelaunch: true }), /different file already uses/);
     assert.equal(await fs.readFile(target, 'utf8'), 'previous application'); assert.equal(await fs.readFile(replacement, 'utf8'), 'unrelated existing file');
     // Also fail after the original has been moved aside: a changed destination
     // must roll the old executable back, without deleting the foreign file.
     await fs.writeFile(replacement, bytes);
     extraParent = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' });
-    child = await launchPortableInstaller({ directory: cache, script: path.resolve(__dirname, '../native/install-update.ps1'), target, update: { filename: update, sha256, version: '0.6.1' }, waitPid: extraParent.pid, powershell: process.platform === 'win32' ? undefined : 'powershell.exe', spawn: (file, args, options) => spawn(file, [...args, '-NoRelaunch'], options) });
+    child = await launchPortableInstaller({ directory: cache, script: path.resolve(__dirname, '../native/install-update.ps1'), target, update: { filename: update, sha256, version: '0.6.1' }, waitPid: extraParent.pid, powershell: process.platform === 'win32' ? undefined : 'powershell.exe', noRelaunch: true });
     await fs.writeFile(replacement, 'changed after staging');
     const failed = new Promise((resolve, reject) => { const timeout = setTimeout(() => reject(Error('Rollback did not finish')), 15000); child.once('exit', code => { clearTimeout(timeout); resolve(code); }); });
     extraParent.kill(); assert.equal(await failed, 1);

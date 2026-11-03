@@ -14,7 +14,7 @@ async function fixture(run) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'liberty-launch-'));
   const source = path.join(directory, 'source.ps1'), target = path.join(directory, 'Liberty-Wave-0.5.1-Windows.exe');
   await fs.writeFile(source, '# test helper'); await fs.writeFile(target, 'old app');
-  const options = { directory, script: source, target, update: { filename: path.join(directory, 'download.exe'), sha256: 'a'.repeat(64), version: '0.6.1' }, waitPid: process.pid, timeout: 500, pollInterval: 5, powershell: 'test-powershell' };
+  const options = { directory, script: source, target, update: { filename: path.join(directory, 'download.exe'), sha256: 'a'.repeat(64), version: '0.6.1' }, waitPid: process.pid, timeout: 500, pollInterval: 5, powershell: 'test-powershell', hosted: false };
   try { await run(options); } finally { await fs.rm(directory, { recursive: true, force: true }); }
 }
 test('installer launch waits for matching staging acknowledgement and names the new executable in the same folder', async () => fixture(async options => {
@@ -51,4 +51,28 @@ test('early script failure and inability to create PowerShell both keep the old 
   await assert.rejects(launchPortableInstaller({ ...options, spawn: () => { setTimeout(() => { child.exitCode = 1; child.emit('exit', 1); }, 0); return child; } }), /завершился до подтверждения/);
   await assert.rejects(launchPortableInstaller({ ...options, spawn: () => { throw Error('blocked'); } }), /создать процесс/);
   assert.equal(await fs.readFile(options.target, 'utf8'), 'old app');
+}));
+test('detached Node host must acknowledge its own PID and the staged PowerShell helper before exit is allowed', async () => fixture(async options => {
+  const child = new Child();
+  const result = await launchPortableInstaller({ ...options, hosted: true, noRelaunch: true, spawn: (command, args, config) => {
+    assert.equal(command, process.execPath); assert.equal(config.detached, true);
+    assert.equal(config.env.ELECTRON_RUN_AS_NODE, '1');
+    assert.equal(path.basename(args[0]), 'install-host.cjs');
+    const spec = JSON.parse(args[1]), value = key => spec.args[spec.args.indexOf(key) + 1];
+    assert.equal(spec.executable, 'test-powershell'); assert.ok(spec.args.includes('-NoRelaunch'));
+    setTimeout(async () => {
+      await fs.writeFile(value('-ReadyPath'), JSON.stringify({ phase: 'ready', token: value('-ReadyToken'), pid: 43, hostPid: child.pid, sha256: options.update.sha256 }));
+    }, 10);
+    return child;
+  } });
+  assert.equal(result, child); assert.equal(child.unreferenced, true);
+}));
+test('a readiness record from a different Node host is rejected', async () => fixture(async options => {
+  const child = new Child();
+  await assert.rejects(launchPortableInstaller({ ...options, hosted: true, timeout: 40, spawn: (_command, args) => {
+    const spec = JSON.parse(args[1]), value = key => spec.args[spec.args.indexOf(key) + 1];
+    setTimeout(() => fs.writeFile(value('-ReadyPath'), JSON.stringify({ phase: 'ready', token: value('-ReadyToken'), pid: 43, hostPid: child.pid + 1, sha256: options.update.sha256 })), 0);
+    return child;
+  } }), /не подтвердил готовность/);
+  assert.equal(child.unreferenced, false);
 }));

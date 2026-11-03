@@ -23,7 +23,7 @@ async function main() {
       if (folder === 'retry') await fs.writeFile(replacement, bytes); // Reuse an already verified destination.
       parent = fork(path.join(__dirname, 'installer-parent.cjs'), [], { stdio: ['ignore', 'inherit', 'inherit', 'ipc'] });
       const message = once(parent, 'message', { signal: AbortSignal.timeout(65000) });
-      parent.send({ directory: cache, script: path.join(__dirname, '../native/install-update.ps1'), target, update: { filename, version: '0.6.4', sha256: createHash('sha256').update(bytes).digest('hex') }, powershell: process.argv[2] || undefined });
+      parent.send({ directory: cache, script: path.join(__dirname, '../native/install-update.ps1'), target, update: { filename, version: '0.6.4', sha256: createHash('sha256').update(bytes).digest('hex') }, powershell: process.argv[2] || undefined, hosted: process.argv.includes('--hosted') ? true : undefined });
       const [ready] = await message; assert.equal(ready.ready, true, ready.error);
       assert.equal(await fs.readFile(target, 'utf8'), 'previous app');
       const exited = once(parent, 'exit'); parent.send('exit'); assert.deepEqual(await exited, [0, null]); parent = null;
