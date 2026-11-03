@@ -59,7 +59,9 @@
       let barsMoving = false;
       for (let i = 0; i < bars.length; i++) {
         const next = preferences.rhythmBars && !disabled ? reaction.bars[i] * intensity : 0;
-        barValues[i] = smooth(barValues[i], next, elapsed, .035, .09);
+        // A media-query change can be observed before its change event reaches
+        // a background window. Disabled motion must settle in this frame too.
+        barValues[i] = disabled ? 0 : smooth(barValues[i], next, elapsed, .035, .09);
         barsMoving ||= Math.abs(barValues[i] - next) > .001;
         const transform = `scaleY(${Number(barValues[i].toFixed(3))})`;
         if (bars[i].style.transform !== transform) bars[i].style.transform = transform;

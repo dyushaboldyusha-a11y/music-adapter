@@ -48,6 +48,8 @@ jobs:
         env:
           ELECTRON_BUILDER_COMPRESSION_LEVEL: '3'
       - run: npm run check:branding
+      - name: Check packaged voice helper
+        run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File release/win-unpacked/resources/native/windows-automation.ps1 -InitializeOnly
       - name: Package browser connector
         shell: pwsh
         run: |
