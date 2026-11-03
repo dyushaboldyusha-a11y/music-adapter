@@ -13,6 +13,7 @@ Speech synthesis: `espeak-ng -v VOICE -s RATE -w raw.wav TEXT`, followed by
   - `ru-nazad.wav`: `ru+f3`, 160 words/minute.
 - New English positives and negatives: `en-us`, 135 words/minute, except:
   - `en-quieter.wav`: `en-us+m3`, 160 words/minute.
+  - `en-volume-down.wav`: `en-us+f3`, 160 words/minute.
   - `en-sound-on.wav`: `en-us+m3`, 190 words/minute.
 
 `samples.json` records the phrase and expected action for all 51 samples.
