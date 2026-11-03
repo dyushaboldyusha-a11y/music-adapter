@@ -19,4 +19,10 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & node (Join-Path $PSScriptRoot 'check-windows.cjs')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & node (Join-Path $PSScriptRoot 'check-installer-handshake.cjs')
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& node (Join-Path $PSScriptRoot 'check-installer-survival.cjs')
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '../native/windows-automation.ps1') -InitializeOnly
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& node (Join-Path $PSScriptRoot 'check-automation-bridge.cjs')
 exit $LASTEXITCODE

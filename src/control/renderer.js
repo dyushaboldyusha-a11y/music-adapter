@@ -4,6 +4,7 @@ const editingRanges = new Set(), clock = new LibertyPlaybackClock();
 const theme = LibertyControlTheme.create(action, () => page === 'appearance');
 const shortcuts = LibertyControlShortcuts.create(action);
 const personalization = LibertyPersonalization.create(action);
+const automation = LibertyAutomationControls.create(action);
 const services = [['yandex', 'Яндекс Музыка', 'Я', '#ffcc33'], ['spotify', 'Spotify', 'S', '#3cd980'], ['soundcloud', 'SoundCloud', '☁', '#ff9445'], ['youtube', 'YouTube', '▶', '#ff626b'], ['vk', 'VK Музыка', 'VK', '#68a5ff']];
 const time = value => { const s = Math.floor(Math.max(0, value || 0)); return s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 function message(text, error = false) { clearTimeout(noticeTimer); $('notice').textContent = text; $('notice').hidden = !text; $('notice').classList.toggle('error', error); noticeTimer = setTimeout(() => { $('notice').hidden = true; }, error ? 9000 : 3500); }
@@ -86,7 +87,7 @@ function updateUpdates() {
 function update(next) {
   if (!next) return;
   if (state?.source?.id !== next.source?.id) { seeking = false; editingRanges.delete('volume'); }
-  state = next; clock.update(state); theme.update(state); shortcuts.update(state); personalization.update(state);
+  state = next; clock.update(state); theme.update(state); shortcuts.update(state); personalization.update(state); automation.update(state);
   $('version').textContent = state.version; $('mode-badge').textContent = state.interaction ? 'Управление включено' : 'Закреплён'; $('mode-badge').classList.toggle('editable', state.interaction);
   $('interaction').checked = state.interaction; $('compact').checked = state.preferences.compact;
   $('interaction-description').textContent = state.interaction ? 'Виджет можно перемещать и нажимать его кнопки' : 'Клики проходят сквозь виджет';
