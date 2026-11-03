@@ -1,6 +1,6 @@
 import { _electron } from 'playwright';
 import { createRequire } from 'node:module';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import assert from 'node:assert/strict';
@@ -22,6 +22,22 @@ try {
   let { control, action } = await launch();
   assert.equal(await control.locator('#voice-enabled').isChecked(), false);
   assert.equal(await control.locator('#voice-enabled').isDisabled(), process.platform !== 'win32');
+  assert.equal(await control.locator('#voice-microphone').count(), 1);
+  assert.equal(await control.locator('#microphone-test').isDisabled(), process.platform !== 'win32');
+  assert.equal(await control.locator('#microphone-level').getAttribute('aria-label'), 'Уровень сигнала микрофона');
+  const captureStart = await control.evaluate(() => libertyControl.getState());
+  if (process.platform !== 'win32') assert.equal((await action('microphoneTest', true)).ok, false);
+  assert.equal((await action('microphone', '../invalid')).ok, false);
+  assert.equal((await control.evaluate(() => libertyControl.getState())).title, captureStart.title, 'Microphone actions must not change the track');
+  for (const id of ['voice-enabled', 'profiles-enabled']) {
+    const geometry = await control.locator('#' + id).evaluate(input => {
+      const bounds = input.getBoundingClientRect(), row = input.closest('label');
+      return { width: bounds.width, height: bounds.height, row: getComputedStyle(row).display };
+    });
+    assert.deepEqual(geometry, { width: 34, height: 20, row: 'flex' }, `${id}: switch must not inherit text-field width or block-label layout`);
+  }
+  await mkdir(join(root, 'artifacts'), { recursive: true });
+  await control.locator('#voice-enabled').locator('xpath=../..').screenshot({ path: join(root, 'artifacts/voice-controls.png') });
   assert.equal((await action('preferences', { compact: true, scale: .75 })).ok, true);
   await control.locator('#profile-name').fill('Моя игра'); await control.locator('#profile-exe').fill('GAME.exe');
   await control.locator('#profile-form button').click();

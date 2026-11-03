@@ -13,7 +13,7 @@ function heldKeys(accelerator) {
   });
 }
 function normalizeAutomation(input = {}) {
-  return { foreground: typeof input.foreground === 'string' ? input.foreground.slice(0, 160) : '', listening: input.listening === true, session: Number.isSafeInteger(input.session) ? input.session : 0, command: typeof input.command === 'string' ? input.command : '', error: typeof input.error === 'string' ? input.error.slice(0, 500) : null, language: typeof input.language === 'string' ? input.language : '' };
+  return { foreground: typeof input.foreground === 'string' ? input.foreground.slice(0, 160) : '', listening: input.listening === true, session: Number.isSafeInteger(input.session) ? input.session : 0, command: typeof input.command === 'string' ? input.command : '', error: typeof input.error === 'string' ? input.error.slice(0, 500) : null, language: typeof input.language === 'string' ? input.language : '', phase: ['idle', 'listening', 'processing', 'recognized', 'tested', 'error'].includes(input.phase) ? input.phase : input.listening ? 'listening' : 'idle', test: input.test === true, heard: typeof input.heard === 'string' ? input.heard.slice(0, 200) : '', level: Number.isFinite(input.level) ? Math.max(0, Math.min(1, input.level)) : 0, peak: Number.isFinite(input.peak) ? Math.max(0, Math.min(1, input.peak)) : 0, speechAvailable: input.speechAvailable === true, microphones: Array.isArray(input.microphones) ? input.microphones.filter(m => m && typeof m.id === 'string' && /^(default|\d{1,3})$/.test(m.id) && typeof m.name === 'string').slice(0, 100).map(m => ({ id: m.id, name: m.name.slice(0, 200) })) : [] };
 }
 class WindowsAutomation extends WindowsMedia {
   constructor(script) {
@@ -23,10 +23,12 @@ class WindowsAutomation extends WindowsMedia {
   configure(value) {
     if (JSON.stringify(this.configuration) === JSON.stringify(value)) return;
     this.configuration = value;
-    if (!this.started) { if (!value.monitor && !value.voice) return; this.started = true; this.start(); }
+    if (!this.started) { this.started = true; this.start(); }
     else this.sendConfiguration();
   }
   sendConfiguration() { this.request('configure', this.configuration).catch(error => this.emit('state', normalizeAutomation({ error: error.message }))); }
+  refreshMicrophones() { return this.request('probe'); }
+  testMicrophone(enabled) { return this.request('test', enabled); }
 }
 // Recognized text is never evaluated. Native grammar returns only these actions.
 // A hold is bound to one source and accepts at most one command.
@@ -34,9 +36,9 @@ class VoiceGate {
   constructor(getState, command, volume) { Object.assign(this, { getState, command, volume }); this.session = 0; this.cancel(); }
   cancel() { this.source = null; this.used = true; }
   async accept(value) {
-    if (!value.listening) { this.cancel(); this.session = value.session; return; }
+    if (value.test || !value.listening && !['processing', 'recognized'].includes(value.phase)) { this.cancel(); this.session = value.session; return; }
     if (value.session !== this.session) {
-      if (value.command) return; // A command cannot create its own listening session.
+      if (value.command || !value.listening) return; // A result cannot create its own listening session.
       this.session = value.session; this.source = this.getState().source?.id; this.used = false;
     }
     const state = this.getState();

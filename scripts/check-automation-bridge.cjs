@@ -11,7 +11,23 @@ async function main() {
     // also preventing key-up from closing the microphone on Windows PowerShell.
     const [state] = await firstState;
     assert.equal(state.listening, false); assert.equal(state.session, 0);
+    assert.ok(Array.isArray(state.microphones));
+    assert.equal(state.microphones[0].id, 'default');
+    assert.equal(typeof state.speechAvailable, 'boolean');
+    await bridge.request('probe');
     await bridge.request('configure', { monitor: false, voice: false, keys: [] });
+    if (process.platform === 'win32') {
+      await bridge.request('configure', { monitor: false, voice: false, keys: [], microphone: '999' });
+      const failure = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { bridge.off('state', listener); reject(Error('Missing microphone validation failure')); }, 10000);
+        const listener = value => { if (value.phase === 'error') { clearTimeout(timer); bridge.off('state', listener); resolve(value); } };
+        bridge.on('state', listener);
+      });
+      await bridge.request('test', true);
+      const failed = await failure;
+      assert.equal(failed.listening, false); assert.equal(failed.phase, 'error');
+      assert.match(failed.error, /микрофон/i);
+    }
     await new Promise(resolve => setTimeout(resolve, 250));
     await bridge.request('configure', { monitor: false, voice: false, keys: [] });
     console.log('PASS: native automation runs with stdin idle, accepts repeated UTF-8 configuration and never opens a microphone while disabled.');

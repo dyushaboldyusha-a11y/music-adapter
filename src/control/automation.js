@@ -5,17 +5,22 @@
     panel.innerHTML = `<h3 class="section-title">Профили приложений и игр</h3>
       <div class="card personal-card"><label class="setting-row"><span><strong>Автоматические профили</strong><small>Настройки виджета переключаются по активному приложению Windows</small></span><input id="profiles-enabled" type="checkbox" class="switch"></label>
       <p id="profile-status" role="status" class="footnote"></p><div id="profile-list"></div>
-      <form id="profile-form"><label for="profile-name">Название профиля</label><input id="profile-name" maxlength="60" required placeholder="Моя игра"><label for="profile-exe">Исполняемый файл</label><input id="profile-exe" maxlength="160" required placeholder="game.exe" spellcheck="false"><div class="button-row"><button class="primary">Сохранить текущий вид для приложения</button></div></form>
+      <form id="profile-form"><label for="profile-name">Название профиля</label><input id="profile-name" type="text" maxlength="60" required placeholder="Моя игра"><label for="profile-exe">Исполняемый файл</label><input id="profile-exe" type="text" maxlength="160" required placeholder="game.exe" spellcheck="false"><div class="button-row"><button class="primary">Сохранить текущий вид для приложения</button></div></form>
       <p class="footnote">Без подходящего профиля используются обычные настройки. Когда профиль активен, изменения оформления сохраняются в нём. Повторное сохранение заменяет профиль этого приложения.</p></div>
       <h3 class="section-title">Локальные голосовые команды</h3><div class="card personal-card"><label class="setting-row"><span><strong>Голос при удержании клавиши</strong><small>Назначьте «Голос» в разделе «Горячие клавиши»</small></span><input id="voice-enabled" type="checkbox" class="switch"></label>
+      <label for="voice-microphone">Микрофон</label><div class="microphone-controls"><select id="voice-microphone" aria-label="Микрофон для голосовых команд"></select><button id="microphone-refresh" type="button">Обновить</button><button id="microphone-test" type="button">Проверить микрофон</button></div>
+      <progress id="microphone-level" class="microphone-level" max="1" value="0" aria-label="Уровень сигнала микрофона"></progress><p id="microphone-status" class="footnote" role="status">Проверка длится 3 секунды. Произнесите команду; музыка останется без изменений.</p>
       <p id="voice-status" role="status" aria-live="polite" class="footnote"></p>
-      <p class="footnote">Микрофон работает только во время удержания, максимум 15 секунд. Одна команда на удержание. Звук не записывается и не отправляется в сеть. Нужен установленный локальный речевой пакет Windows: русский или английский.</p>
-      <p class="footnote">Русский: «пауза», «продолжить», «следующий трек», «предыдущий трек», «громче», «тише», «выключить звук», «включить звук». Английский: pause, resume, next track, previous track, volume up, volume down, mute, unmute.</p></div>`;
+      <p class="footnote">Удерживайте клавишу, произнесите команду и отпустите. Микрофон закрывается при отпускании; распознавание завершает обработку фразы. Одна команда на удержание, максимум 15 секунд. Звук не сохраняется и не отправляется в сеть.</p>
+      <p id="voice-commands" class="footnote"></p></div>`;
     $('page-home').append(panel);
-    let state, listKey = '';
+    let state, listKey = '', microphoneKey = '';
     function save(items, enabled = state.appProfiles.enabled) { return action('profiles', { enabled, items }); }
     $('profiles-enabled').addEventListener('change', () => save(state.appProfiles.items, $('profiles-enabled').checked));
     $('voice-enabled').addEventListener('change', () => action('voice', $('voice-enabled').checked));
+    $('voice-microphone').addEventListener('change', () => action('microphone', $('voice-microphone').value));
+    $('microphone-refresh').addEventListener('click', () => action('microphoneRefresh'));
+    $('microphone-test').addEventListener('click', () => action('microphoneTest', !(state.automation.test && state.automation.listening)));
     $('profile-form').addEventListener('submit', async event => {
       event.preventDefault();
       const executable = $('profile-exe').value.trim().toLowerCase();
@@ -29,7 +34,23 @@
       $('profiles-enabled').checked = p.enabled; $('profiles-enabled').disabled = !voice.supported;
       $('voice-enabled').checked = voice.enabled; $('voice-enabled').disabled = !voice.supported;
       $('profile-status').textContent = !voice.supported ? 'Переключение профилей доступно в Windows. Здесь можно подготовить профили.' : p.active ? `Активен: ${p.items.find(item => item.executable === p.active)?.name}` : `Обычные настройки${p.foreground ? ' · ' + p.foreground : ''}`;
-      $('voice-status').textContent = !voice.supported ? 'Распознавание доступно в Windows.' : !voice.enabled ? 'Выключено' : voice.error || (voice.listening ? `Слушаю · ${voice.language}` : state.shortcuts.bindings.voiceHold ? 'Удерживайте назначенное сочетание и произнесите команду.' : 'Назначьте клавишу для голоса в разделе «Горячие клавиши».');
+      const busy = voice.listening || voice.phase === 'processing';
+      const micKey = JSON.stringify([voice.microphones, voice.microphone]);
+      if (micKey !== microphoneKey) {
+        microphoneKey = micKey;
+        const devices = voice.microphones?.length ? voice.microphones : [{ id: 'default', name: 'Системный микрофон (по умолчанию)' }];
+        const options = devices.map(microphone => new Option(microphone.name, microphone.id));
+        if (!devices.some(microphone => microphone.id === voice.microphone)) options.push(new Option('Выбранный микрофон отключён', voice.microphone));
+        $('voice-microphone').replaceChildren(...options); $('voice-microphone').value = voice.microphone || 'default';
+      }
+      $('voice-microphone').disabled = !voice.supported || busy;
+      $('microphone-refresh').disabled = !voice.supported || busy;
+      $('microphone-test').disabled = !voice.supported || voice.phase === 'processing' || voice.listening && !voice.test;
+      $('microphone-test').textContent = voice.test && voice.listening ? 'Остановить проверку' : 'Проверить микрофон';
+      $('microphone-level').value = voice.level || 0;
+      $('microphone-status').textContent = voice.test && voice.listening ? 'Проверка: говорите в выбранный микрофон…' : voice.test && voice.phase === 'processing' ? 'Микрофон закрыт. Распознаю тестовую фразу…' : voice.test && ['tested', 'recognized'].includes(voice.phase) ? (voice.peak > .01 ? 'Сигнал получен.' : 'Сигнал не обнаружен. Проверьте устройство и разрешения Windows.') + (voice.heard ? ` Распознано: «${voice.heard}».` : '') + ' Команды плееру не отправлялись.' : 'Проверка длится 3 секунды. Произнесите команду; музыка останется без изменений.';
+      $('voice-status').textContent = !voice.supported ? 'Распознавание доступно в Windows.' : voice.error || (!voice.enabled ? 'Голосовое управление выключено. Микрофон можно проверить отдельно.' : !state.shortcuts.bindings.voiceHold ? 'Назначьте клавишу для голоса в разделе «Горячие клавиши».' : !state.shortcuts.available.voiceHold ? 'Голосовое сочетание занято или недоступно. Назначьте другое.' : voice.listening ? `Слушаю · ${voice.language}` : voice.phase === 'processing' ? 'Микрофон закрыт. Распознаю команду…' : voice.heard ? `Распознано: «${voice.heard}».` : `Удерживайте назначенное сочетание и произнесите команду. Язык: ${voice.language || 'проверяется'}.`);
+      $('voice-commands').textContent = voice.language?.startsWith('en') ? 'Язык распознавателя — английский. Команды: pause, resume, next track, previous track, volume up, volume down, mute, unmute. Русские команды этот распознаватель не понимает.' : 'Русские команды доступны при установленном русском SAPI-распознавателе: «пауза», «продолжить», «следующий трек», «предыдущий трек», «громче», «тише», «выключить звук», «включить звук».';
       const key = JSON.stringify(p.items.map(item => [item.executable, item.name]));
       if (key !== listKey) {
         listKey = key; $('profile-list').replaceChildren();

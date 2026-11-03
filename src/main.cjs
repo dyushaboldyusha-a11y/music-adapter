@@ -42,7 +42,7 @@ function configureAutomation() {
   const status = shortcuts?.snapshot();
   const voice = settings.voiceEnabled === true && !controlCapture && status?.available.voiceHold === true;
   if (!voice) voiceGate.cancel();
-  automation?.configure({ monitor: profiles.enabled, voice, keys: voice ? heldKeys(shortcuts.bindings.voiceHold) : [] });
+  automation?.configure({ monitor: profiles.enabled, voice, keys: voice ? heldKeys(shortcuts.bindings.voiceHold) : [], microphone: settings.voiceMicrophone || 'default' });
 }
 function profileChanged() { settings.appProfiles = profiles.saved(); save(); restoreLayout(); refreshState(); configureAutomation(); }
 let settings = {}, interaction = true, shortcutCommandPending = false, state = { ...EMPTY_STATE };
@@ -127,7 +127,7 @@ async function openMusic(provider = state.source?.provider || 'yandex', nativeAp
   catch { return { ok: false, error: 'Откройте плеер самостоятельно' }; }
 }
 function controlSnapshot() {
-  return { ...snapshot(), preferences: effectivePreferences(), displays: screen.getAllDisplays().map((d, index) => ({ id: String(d.id), name: d.label || `Монитор ${index + 1}`, width: d.workArea.width, height: d.workArea.height })), effectiveScale, version: app.getVersion(), pairedBrowsers: browserBridge?.clients.size || 0, pairing: browserBridge?.pairing || null, controlCapture, positions: Object.fromEntries(['bounds', 'compactBounds'].filter(key => effectiveSettings()[key]).map(key => [key, effectiveSettings()[key]])), appProfiles: profiles.snapshot(), automation: { ...automationState, supported: process.platform === 'win32', enabled: settings.voiceEnabled === true } };
+  return { ...snapshot(), preferences: effectivePreferences(), displays: screen.getAllDisplays().map((d, index) => ({ id: String(d.id), name: d.label || `Монитор ${index + 1}`, width: d.workArea.width, height: d.workArea.height })), effectiveScale, version: app.getVersion(), pairedBrowsers: browserBridge?.clients.size || 0, pairing: browserBridge?.pairing || null, controlCapture, positions: Object.fromEntries(['bounds', 'compactBounds'].filter(key => effectiveSettings()[key]).map(key => [key, effectiveSettings()[key]])), appProfiles: profiles.snapshot(), automation: { ...automationState, supported: process.platform === 'win32', enabled: settings.voiceEnabled === true, microphone: settings.voiceMicrophone || 'default' } };
 }
 async function openControls(page = 'home') {
   if (!['home', 'sources', 'appearance', 'shortcuts', 'updates'].includes(page)) return { ok: false, error: 'Неизвестный раздел' };
@@ -157,6 +157,15 @@ async function controlAction(action, value) {
     case 'voice':
       if (typeof value !== 'boolean') throw new Error('Некорректный режим голоса');
       settings.voiceEnabled = value; configureAutomation(); save(); publish(); return { ok: true };
+    case 'microphone':
+      if (typeof value !== 'string' || !automationState.microphones.some(microphone => microphone.id === value)) throw new Error('Выберите доступный микрофон');
+      settings.voiceMicrophone = value; voiceGate.cancel(); configureAutomation(); save(); publish(); return { ok: true };
+    case 'microphoneRefresh':
+      if (!automation) throw new Error('Проверка микрофона доступна в Windows');
+      await automation.refreshMicrophones(); return { ok: true };
+    case 'microphoneTest':
+      if (!automation || typeof value !== 'boolean') throw new Error('Проверка микрофона доступна в Windows');
+      voiceGate.cancel(); await automation.testMicrophone(value); return { ok: true };
     case 'preferences': setPreferences(value); return { ok: true };
     case 'command': return mediaCommand(value?.command, value?.value);
     case 'source': return selectSource(value);

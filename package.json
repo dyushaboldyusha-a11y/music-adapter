@@ -1,7 +1,7 @@
 {
   "name": "liberty-wave",
   "productName": "Liberty Wave",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Liberty Wave — музыкальный виджет для приложений и браузеров",
   "author": "Liberty",
   "license": "MIT",
@@ -52,7 +52,8 @@
         "from": "native",
         "to": "native",
         "filter": [
-          "**/*.ps1"
+          "**/*.ps1",
+          "**/*.cs"
         ]
       }
     ],

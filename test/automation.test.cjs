@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { heldKeys, VoiceGate } = require('../src/automation.cjs');
+const { heldKeys, VoiceGate, normalizeAutomation } = require('../src/automation.cjs');
 const { DEFAULT_BINDINGS, normalizeBindings, readBindings } = require('../src/shared/shortcuts.js');
 test('voice binding migrates disabled and supports physical held chords including numpad and modifiers', () => {
   assert.equal(readBindings({ toggleInteraction: 'F8', playPause: '' }).voiceHold, '');
@@ -40,4 +40,29 @@ test('local voice volume/mute are bounded commands, unrecognized text is never e
     await f.update(i + 1); await f.update(i + 1, command);
   }
   assert.deepEqual(f.calls, [['step', .05], ['step', -.05], ['mute', true], ['mute', false]]);
+});
+test('key release closes capture but does not discard a final result from the same authorized voice session', async () => {
+  const f = fixture();
+  await f.update(1);
+  await f.gate.accept({ session: 1, listening: false, phase: 'processing' });
+  await f.gate.accept({ session: 1, listening: false, phase: 'recognized' });
+  await f.gate.accept({ session: 1, listening: false, phase: 'recognized', command: 'next' });
+  await f.gate.accept({ session: 1, listening: false, phase: 'recognized', command: 'next' });
+  assert.deepEqual(f.calls, [['next']]);
+});
+test('microphone tests and canceled post-release recognition never execute player commands', async () => {
+  const f = fixture();
+  await f.gate.accept({ session: 1, listening: true, test: true });
+  await f.gate.accept({ session: 1, listening: false, phase: 'recognized', test: true, command: 'next' });
+  assert.deepEqual(f.calls, []);
+  await f.update(2); f.gate.cancel();
+  await f.gate.accept({ session: 2, phase: 'recognized', command: 'next' });
+  assert.deepEqual(f.calls, []);
+  await f.gate.accept({ session: 3, phase: 'recognized', command: 'next' });
+  assert.deepEqual(f.calls, []);
+});
+test('microphone metadata keeps safe device IDs and finite level values', () => {
+  const value = normalizeAutomation({ microphones: [{ id: 'default', name: 'System' }, { id: '2', name: 'USB Mic' }, { id: '../file', name: 'Invalid' }, null], level: Infinity, peak: 3, phase: 'processing', test: true });
+  assert.deepEqual(value.microphones, [{ id: 'default', name: 'System' }, { id: '2', name: 'USB Mic' }]);
+  assert.equal(value.level, 0); assert.equal(value.peak, 1); assert.equal(value.phase, 'processing'); assert.equal(value.test, true);
 });
