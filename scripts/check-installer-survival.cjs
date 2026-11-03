@@ -31,6 +31,12 @@ async function main() {
       assert.equal(status.ok, true, status.error);
       assert.deepEqual(await fs.readFile(replacement), bytes);
       await waitFor(() => fs.readdir(directory), names => !names.some(n => /pending|backup/.test(n)));
+      // "complete" records successful replacement before asynchronous cleanup.
+      // Directory cleanup and deletion from the download cache are separate.
+      await waitFor(async () => {
+        try { await fs.stat(filename); return false; }
+        catch (error) { if (error.code === 'ENOENT') return true; throw error; }
+      }, removed => removed);
       await assert.rejects(fs.stat(target), { code: 'ENOENT' });
       await assert.rejects(fs.stat(filename), { code: 'ENOENT' });
       console.log(`PASS: installer survives its launching parent's exit, verified replacement and cleanup: ${folder}`);

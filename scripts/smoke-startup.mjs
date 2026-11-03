@@ -46,11 +46,20 @@ for (const rhythmBars of [false, true]) for (const dpi of [1, 1.25, 1.5]) for (c
     assert.ok(bounds.x >= area.x && bounds.y >= area.y && bounds.x + bounds.width <= area.x + area.width + 1 && bounds.y + bounds.height <= area.y + area.height + 1, `${label}: window must fit on the available screen`);
     results.push({ dpi, compact, scale, rhythmBars, native, viewport });
     if (dpi === 1 && scale === .5) {
-      const capture = await app.evaluate(async ({ BrowserWindow }) => {
-        const window = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('/renderer/index.html'));
-        const image = await window.capturePage();
-        return { size: image.getSize(), png: image.toPNG().toString('base64') };
-      });
+      let capture;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        // Layout is verified above. Viz can still be committing the first
+        // surface, especially just after restoring a scaled native window.
+        await widget.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+        try {
+          capture = await app.evaluate(async ({ BrowserWindow }) => {
+            const window = BrowserWindow.getAllWindows().find(w => w.webContents.getURL().endsWith('/renderer/index.html'));
+            const image = await window.capturePage();
+            return { size: image.getSize(), png: image.toPNG().toString('base64') };
+          });
+          break;
+        } catch (error) { if (attempt === 2 || !error.message.includes('UnknownVizError')) throw error; }
+      }
       await writeFile(join(output, `${rhythmBars ? 'rhythm-' : ''}${compact ? 'compact' : 'full'}-half-scale.png`), Buffer.from(capture.png, 'base64'));
       assert.deepEqual(capture.size, { width: native.bounds.width, height: native.bounds.height }, 'The captured surface must cover the complete native window');
     }
