@@ -31,6 +31,9 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - run: npm run voice:prepare
+      - name: Check bundled Russian recognition without SAPI
+        run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File native/windows-automation.ps1 -CheckSamples test/fixtures/voice
       - run: npm test
       - name: Check Windows integrations
         shell: pwsh
@@ -49,7 +52,13 @@ jobs:
           ELECTRON_BUILDER_COMPRESSION_LEVEL: '3'
       - run: npm run check:branding
       - name: Check packaged voice helper
-        run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File release/win-unpacked/resources/native/windows-automation.ps1 -InitializeOnly
+        run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File release/win-unpacked/resources/native/windows-automation.ps1 -CheckSamples test/fixtures/voice
+      - name: Check voice engine under a Unicode path
+        shell: pwsh
+        run: |
+          Copy-Item -LiteralPath release/win-unpacked/resources/native -Destination 'artifacts/Голос с пробелами' -Recurse
+          & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File 'artifacts/Голос с пробелами/windows-automation.ps1' -CheckSamples test/fixtures/voice
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package browser connector
         shell: pwsh
         run: |

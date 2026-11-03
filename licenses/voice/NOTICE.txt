@@ -1,0 +1,27 @@
+Liberty Wave offline voice components
+
+Vosk API 0.3.45, Copyright Alpha Cephei Inc. and contributors.
+Russian model vosk-model-small-ru-0.22, published by Alpha Cephei.
+Both are distributed under the Apache License 2.0 (APACHE-2.0.txt).
+Sources: https://github.com/alphacep/vosk-api/tree/v0.3.45
+Model and license listing: https://alphacephei.com/vosk/models
+
+The official native Vosk binary includes Kaldi and OpenFst (Apache 2.0),
+OpenBLAS (OPENBLAS.txt), CLAPACK (CLAPACK.txt) and libf2c (F2C.txt).
+Sources: https://github.com/alphacep/kaldi
+https://github.com/alphacep/openfst
+https://github.com/OpenMathLib/OpenBLAS/tree/v0.3.20
+https://github.com/alphacep/clapack/tree/v3.2.1
+Upstream Windows build instructions:
+https://github.com/alphacep/vosk-api/blob/v0.3.45/travis/Dockerfile.win
+
+The Windows binary distribution includes the unmodified MinGW-w64
+libwinpthread-1.dll (WINPTHREADS.txt), libgcc_s_seh-1.dll and libstdc++-6.dll.
+GCC runtime libraries are covered by GPL-3.0.txt with the additional permission
+in GCC-RUNTIME-EXCEPTION.txt. Their inclusion does not change Liberty Wave's
+own MIT license. Upstream sources: https://gcc.gnu.org/git.html and
+https://github.com/mingw-w64/mingw-w64/tree/master/mingw-w64-libraries/winpthreads
+
+Archive versions, official HTTPS URLs and pinned SHA-256 values are recorded
+in the accompanying manifest.json. These components and model files are
+included locally; speech audio is not sent to any server.

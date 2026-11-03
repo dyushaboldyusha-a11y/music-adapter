@@ -14,6 +14,8 @@ async function main() {
     assert.ok(Array.isArray(state.microphones));
     assert.equal(state.microphones[0].id, 'default');
     assert.equal(typeof state.speechAvailable, 'boolean');
+    assert.equal(state.speechAvailable, true, state.error);
+    assert.equal(state.language, 'ru-RU');
     await bridge.request('probe');
     await bridge.request('configure', { monitor: false, voice: false, keys: [] });
     if (process.platform === 'win32') {

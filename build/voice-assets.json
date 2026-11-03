@@ -1,0 +1,17 @@
+{
+  "model": {
+    "name": "vosk-model-small-ru-0.22",
+    "url": "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip",
+    "sha256": "961d5ff98a17f4aa6de69864d0aa71fa5bac682301d2b5d17a3f24c5c99a46d4"
+  },
+  "win-x64": {
+    "name": "vosk-win64-0.3.45",
+    "url": "https://github.com/alphacep/vosk-api/releases/download/v0.3.45/vosk-win64-0.3.45.zip",
+    "sha256": "f1dcc9cca460630f81ea8f71794f69c80bed6556d2a4e6237b5785e1d2dff34b"
+  },
+  "linux-x64": {
+    "name": "vosk-linux-x86_64-0.3.45",
+    "url": "https://github.com/alphacep/vosk-api/releases/download/v0.3.45/vosk-linux-x86_64-0.3.45.zip",
+    "sha256": "bbdc8ed85c43979f6443142889770ea95cbfbc56cffb5c5dcd73afa875c5fbb2"
+  }
+}

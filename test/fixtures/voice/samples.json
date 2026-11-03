@@ -1,0 +1,52 @@
+[
+  {
+    "file": "pause.wav",
+    "text": "пауза",
+    "command": "pause"
+  },
+  {
+    "file": "resume.wav",
+    "text": "продолжить",
+    "command": "resume"
+  },
+  {
+    "file": "next.wav",
+    "text": "следующий трек",
+    "command": "next"
+  },
+  {
+    "file": "previous.wav",
+    "text": "предыдущий трек",
+    "command": "previous"
+  },
+  {
+    "file": "volumeUp.wav",
+    "text": "громче",
+    "command": "volumeUp"
+  },
+  {
+    "file": "volumeDown.wav",
+    "text": "тише",
+    "command": "volumeDown"
+  },
+  {
+    "file": "mute.wav",
+    "text": "выключить звук",
+    "command": "mute"
+  },
+  {
+    "file": "unmute.wav",
+    "text": "включить звук",
+    "command": "unmute"
+  },
+  {
+    "file": "silence.wav",
+    "text": "",
+    "command": "none"
+  },
+  {
+    "file": "noise.wav",
+    "text": "",
+    "command": "none"
+  }
+]

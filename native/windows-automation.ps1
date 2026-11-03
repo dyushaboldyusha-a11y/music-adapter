@@ -1,13 +1,36 @@
-﻿param([switch]$InitializeOnly)
+﻿param([switch]$InitializeOnly, [string]$VoiceRoot = '', [string]$RecognizeWave = '', [string]$ExpectedCommand = '', [string]$CheckSamples = '')
 $ErrorActionPreference = 'Stop'
 [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
-Add-Type -AssemblyName System.Speech
-$references = @('System.dll', 'System.Core.dll', [System.Speech.Recognition.SpeechRecognitionEngine].Assembly.Location)
-if ($PSVersionTable.PSEdition -eq 'Core') { $references = @((Get-ChildItem -LiteralPath (Join-Path $PSHOME 'ref') -Filter '*.dll').FullName) + @([System.Speech.Recognition.SpeechRecognitionEngine].Assembly.Location) }
-Add-Type -ReferencedAssemblies $references -Path (Join-Path $PSScriptRoot 'windows-automation.cs')
-if ($InitializeOnly) { Write-Output 'PASS: foreground/held-key API and offline speech helper compiled without opening the microphone.'; exit 0 }
-$helper = New-Object LibertyAutomation
+$references = @('System.dll', 'System.Core.dll', 'System.Runtime.Serialization.dll', 'System.Xml.dll')
+if ($PSVersionTable.PSEdition -eq 'Core') { $references = @((Get-ChildItem -LiteralPath (Join-Path $PSHOME 'ref') -Filter '*.dll').FullName) }
+Add-Type -ReferencedAssemblies $references -Path @((Join-Path $PSScriptRoot 'offline-speech.cs'), (Join-Path $PSScriptRoot 'windows-automation.cs'))
+if (-not $VoiceRoot) {
+    $VoiceRoot = Join-Path $PSScriptRoot 'voice'
+    if (-not (Test-Path -LiteralPath $VoiceRoot)) { $VoiceRoot = Join-Path $PSScriptRoot '../artifacts/voice-runtime' }
+}
+if ($InitializeOnly -or $RecognizeWave -or $CheckSamples) {
+    if ($RecognizeWave) { $RecognizeWave = [IO.Path]::GetFullPath($RecognizeWave) }
+    if ($CheckSamples) { $CheckSamples = [IO.Path]::GetFullPath($CheckSamples) }
+    [LibertyOfflineSpeech]::Initialize([IO.Path]::GetFullPath($VoiceRoot))
+    if ($CheckSamples) {
+        $samples = [IO.File]::ReadAllText((Join-Path $CheckSamples 'samples.json')) | ConvertFrom-Json
+        if ($samples.Count -lt 10) { throw 'Missing voice samples' }
+        foreach ($sample in $samples) {
+            $result = [LibertyOfflineSpeech]::Recognize([IO.File]::ReadAllBytes((Join-Path $CheckSamples $sample.file)))
+            $command = [LibertyAutomation]::Command($result.Text)
+            if (($sample.command -eq 'none' -and $command) -or ($sample.command -ne 'none' -and ($command -ne $sample.command -or $result.Confidence -lt 0.45))) { throw "Recognition failed: $($sample.file), heard: $($result.Text), command: $command" }
+            Write-Output "PASS: bundled Russian recognition $($sample.file): '$($result.Text)' -> '$command'"
+        }
+    } elseif ($RecognizeWave) {
+        $result = [LibertyOfflineSpeech]::Recognize([IO.File]::ReadAllBytes($RecognizeWave))
+        $command = [LibertyAutomation]::Command($result.Text)
+        if ($ExpectedCommand -and (($ExpectedCommand -eq 'none' -and $command) -or ($ExpectedCommand -ne 'none' -and $command -ne $ExpectedCommand))) { throw "Unexpected recognition: $($result.Text), command: $command" }
+        @{ heard = $result.Text; command = $command; confidence = $result.Confidence } | ConvertTo-Json -Compress
+    } else { Write-Output 'PASS: bundled Russian model and native engine load without SAPI or opening a microphone.' }
+    exit 0
+}
+$helper = [LibertyAutomation]::new([IO.Path]::GetFullPath($VoiceRoot))
 $previous = ''
 $helper.Probe()
 $helper.StartInput()

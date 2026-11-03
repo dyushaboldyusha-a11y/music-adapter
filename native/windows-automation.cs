@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Speech.Recognition;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
@@ -112,10 +111,8 @@ public sealed class LibertyAutomation : IDisposable {
     public volatile bool InputClosed;
     sealed class Result { public long session; public string text, error; public float confidence; }
     readonly ConcurrentQueue<Result> results = new ConcurrentQueue<Result>();
-    SpeechRecognitionEngine engine;
-    RecognizerInfo recognizer;
+    readonly string voiceDirectory;
     LibertyMicrophone capture;
-    MemoryStream wave;
     bool monitor, voice, armed;
     int[] keys = new int[0];
     string device = "default";
@@ -127,18 +124,12 @@ public sealed class LibertyAutomation : IDisposable {
             } } catch (IOException) { } finally { InputClosed = true; }
         }); thread.IsBackground = true; thread.Start();
     }
+    public LibertyAutomation(string directory) { voiceDirectory = directory; }
     public void Probe() {
-        Error = ""; Language = ""; recognizer = null;
+        Error = ""; Language = "ru-RU";
         try { Microphones = LibertyMicrophone.Devices(); } catch (Exception error) { Error = error.Message; }
-        try {
-            foreach (var info in SpeechRecognitionEngine.InstalledRecognizers()) {
-                if (info.Culture.TwoLetterISOLanguageName == "ru") { recognizer = info; break; }
-                if (recognizer == null && info.Culture.TwoLetterISOLanguageName == "en") recognizer = info;
-            }
-            SpeechAvailable = recognizer != null;
-            if (SpeechAvailable) Language = recognizer.Culture.Name;
-            else Error = "Локальный распознаватель SAPI не установлен. Установите совместимый речевой пакет Windows; русский поддерживается только при наличии русского SAPI-распознавателя.";
-        } catch (Exception error) { SpeechAvailable = false; Error = error.Message; }
+        try { LibertyOfflineSpeech.Initialize(voiceDirectory); SpeechAvailable = true; }
+        catch (Exception error) { SpeechAvailable = false; Error = error.Message; }
     }
     public void Configure(bool monitorEnabled, bool voiceEnabled, int[] chord, string selected) {
         Cancel(); monitor = monitorEnabled; voice = voiceEnabled; keys = chord;
@@ -170,7 +161,7 @@ public sealed class LibertyAutomation : IDisposable {
             if (result.session != Session || Phase != "processing") continue;
             Heard = result.text ?? ""; Phase = "recognized";
             if (!String.IsNullOrEmpty(result.error)) { Fail(result.error); continue; }
-            if (String.IsNullOrEmpty(Heard) || result.confidence < 0.45f) { Error = "Команда не распознана. Произнесите команду целиком и отпустите клавишу."; continue; }
+            if (String.IsNullOrEmpty(Heard) || result.confidence < 0.45f || Command(Heard) == "") { Error = "Команда не распознана. Произнесите команду целиком и отпустите клавишу."; continue; }
             Error = "";
             string command = Command(Heard);
             if (!TestMode && command != "") Commands.Enqueue(command);
@@ -182,39 +173,27 @@ public sealed class LibertyAutomation : IDisposable {
         try {
             if (!test && !SpeechAvailable) { Phase = "error"; return; }
             LibertyMicrophone.Validate(device);
-            if (SpeechAvailable) {
-                try {
-                    engine = new SpeechRecognitionEngine(recognizer);
-                    string[] words = recognizer.Culture.TwoLetterISOLanguageName == "ru"
-                        ? new [] { "пауза", "продолжить", "следующий трек", "предыдущий трек", "громче", "тише", "выключить звук", "включить звук" }
-                        : new [] { "pause", "resume", "next track", "previous track", "volume up", "volume down", "mute", "unmute" };
-                    var grammar = new GrammarBuilder(new Choices(words)); grammar.Culture = recognizer.Culture;
-                    engine.LoadGrammar(new Grammar(grammar));
-                } catch (Exception error) {
-                    if (!test) throw;
-                    if (engine != null) { engine.Dispose(); engine = null; }
-                    Error = error.Message;
-                }
-            }
             if (!test && !Down()) return;
             capture = new LibertyMicrophone(device); Session++; Listening = true; Phase = "listening"; started = DateTime.UtcNow;
         } catch (Exception error) { Fail(error.Message); }
     }
     void Finish() {
         try {
-            wave = capture.Finish(); Peak = capture.Peak; capture.Dispose(); capture = null; Listening = false; Level = 0;
-            if (engine == null) { Phase = "tested"; wave.Dispose(); wave = null; return; }
-            long session = Session;
-            engine.RecognizeCompleted += (sender, args) => {
+            byte[] bytes;
+            using (var wave = capture.Finish()) bytes = wave.ToArray();
+            Peak = capture.Peak; capture.Dispose(); capture = null; Listening = false; Level = 0;
+            if (!SpeechAvailable) { Phase = "tested"; return; }
+            long session = Session; Phase = "processing"; processing = DateTime.UtcNow;
+            // Capture is closed before decoding the in-memory buffer. No audio
+            // is written to disk, and results remain bound to the held session.
+            ThreadPool.QueueUserWorkItem(ignored => {
                 var result = new Result { session = session };
-                if (args.Error != null) result.error = args.Error.Message;
-                else if (!args.Cancelled && args.Result != null) { result.text = args.Result.Text; result.confidence = args.Result.Confidence; }
+                try {
+                    var decoded = LibertyOfflineSpeech.Recognize(bytes);
+                    result.text = decoded.Text; result.confidence = decoded.Confidence;
+                } catch (Exception error) { result.error = error.Message; }
                 results.Enqueue(result);
-            };
-            // The microphone is already closed; only captured in-memory PCM is
-            // recognized. Key release must not cancel the final speech result.
-            engine.SetInputToWaveStream(wave); Phase = "processing"; processing = DateTime.UtcNow;
-            engine.RecognizeAsync(RecognizeMode.Single);
+            });
         } catch (Exception error) { Fail(error.Message); }
     }
     public static string Command(string text) {
@@ -234,8 +213,6 @@ public sealed class LibertyAutomation : IDisposable {
     void Cancel() {
         Listening = false; Phase = "idle"; TestMode = false;
         if (capture != null) { capture.Dispose(); capture = null; }
-        if (engine != null) { try { engine.RecognizeAsyncCancel(); } catch (InvalidOperationException) { } finally { engine.Dispose(); engine = null; } }
-        if (wave != null) { wave.Dispose(); wave = null; }
         Result result; while (results.TryDequeue(out result)) { }
         string ignored; while (Commands.TryDequeue(out ignored)) { }
     }
