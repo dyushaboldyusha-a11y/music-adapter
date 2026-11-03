@@ -1,6 +1,4 @@
 $ErrorActionPreference = 'Stop'
-& node (Join-Path $PSScriptRoot 'check-detached-powershell.cjs')
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $bridge = Join-Path $PSScriptRoot '../native/windows-media.ps1'
 $tokens = $null
 $errors = $null
@@ -23,6 +21,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & node (Join-Path $PSScriptRoot 'check-installer-handshake.cjs')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & node (Join-Path $PSScriptRoot 'check-installer-survival.cjs')
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& node (Join-Path $PSScriptRoot 'check-electron-installer.cjs')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot '../native/windows-automation.ps1') -InitializeOnly
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
