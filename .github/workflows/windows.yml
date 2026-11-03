@@ -24,7 +24,17 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npm run check:windows
+      - name: Check Windows integrations
+        shell: pwsh
+        run: |
+          npm run check:windows 2>&1 | Tee-Object -FilePath windows-check.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $details = (Get-Content windows-check.log -Tail 45) -join "`n"
+            $details = $details.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Windows integration failure::$details"
+            exit $code
+          }
       - run: npm run test:update-network
       - run: npm run dist:win
         env:
