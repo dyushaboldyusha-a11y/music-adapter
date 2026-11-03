@@ -145,6 +145,13 @@ public static class LibertyOfflineSpeech {
         return new Result { Text = "", Confidence = 0, Diagnostics = diagnostics };
     }
     static bool Plausible(Result constrained, Result unrestricted) {
+        string phrase = " " + LibertyVoiceCatalog.Normalize(constrained.Text) + " ";
+        string full = " " + LibertyVoiceCatalog.Normalize(unrestricted.Text) + " ";
+        // Polite fillers are easy to hallucinate in foreign-language speech.
+        // Require the full decoder to hear the filler or confirm the action.
+        foreach (string polite in new [] { " please ", " пожалуйста " }) {
+            if (phrase.Contains(polite) && !full.Contains(polite) && Resolve(unrestricted.Text) != Resolve(constrained.Text)) return false;
+        }
         int heardWords = unrestricted.Text.Split(new [] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length;
         int commandWords = constrained.Text.Split(new [] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length;
         double similarity = LibertyVoiceCatalog.Similarity(constrained.Text, unrestricted.Text);
