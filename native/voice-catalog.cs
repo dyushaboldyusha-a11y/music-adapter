@@ -26,7 +26,11 @@ public static class LibertyVoiceCatalog {
         var parts = new List<string>(); foreach (Match word in words) parts.Add(word.Value);
         return String.Join(" ", parts);
     }
-    public static string Normalize(string text) { return Clean(text, true); }
+    public static string Normalize(string text) {
+        // The dynamic decoder can select the standalone nominative "пауза"
+        // inside "на паузу". Repair that case ending before exact lookup.
+        return (" " + Clean(text, true) + " ").Replace(" на пауза ", " на паузу ").Trim();
+    }
     public static void Load(string filename) {
         if (aliases.Count > 0) return;
         Catalog catalog;
@@ -91,7 +95,7 @@ public static class LibertyVoiceCatalog {
         foreach (string text in new [] { "не надо переключать музыку", "do not skip", "don't stop", "это не пауза", "please do not stop", "next pause", "привет" }) if (Resolve(text) != "") throw new InvalidOperationException("Посторонняя фраза стала командой: " + text);
         foreach (string text in new [] { "не переключай музыку", "пожалуйста не останавливай", "do not skip", "please don't stop", "never skip", "not louder" }) if (!NegatesCommand(text)) throw new InvalidOperationException("Отрицание не распознано: " + text);
         foreach (string text in new [] { "пауза", "next", "unmute", "first off no problem", "not sure" }) if (NegatesCommand(text)) throw new InvalidOperationException("Ложное отрицание: " + text);
-        var examples = new Dictionary<string, string> { { "  Пожалуйста, ВПЕРЁД! ", "next" }, { "NEXT TRACK, please!", "next" }, { " UNMUTE!", "unmute" }, { "un mute", "unmute" }, { "ВКЛЮЧИ ЗВУК", "unmute" }, { "Сделай ПОТИШЕ.", "volumeDown" } };
+        var examples = new Dictionary<string, string> { { "  Пожалуйста, ВПЕРЁД! ", "next" }, { "NEXT TRACK, please!", "next" }, { " UNMUTE!", "unmute" }, { "un mute", "unmute" }, { "ВКЛЮЧИ ЗВУК", "unmute" }, { "Сделай ПОТИШЕ.", "volumeDown" }, { "Поставь на пауза, пожалуйста", "pause" } };
         foreach (var pair in examples) if (Resolve(pair.Key) != pair.Value) throw new InvalidOperationException("Ошибка нормализации команды: " + pair.Key);
         return aliases.Count;
     }
