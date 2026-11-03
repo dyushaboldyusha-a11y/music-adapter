@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 $references = @('System.dll', 'System.Core.dll', 'System.Runtime.Serialization.dll', 'System.Xml.dll')
 if ($PSVersionTable.PSEdition -eq 'Core') { $references = @((Get-ChildItem -LiteralPath (Join-Path $PSHOME 'ref') -Filter '*.dll').FullName) }
-Add-Type -ReferencedAssemblies $references -Path @((Join-Path $PSScriptRoot 'offline-speech.cs'), (Join-Path $PSScriptRoot 'windows-automation.cs'))
+Add-Type -ReferencedAssemblies $references -Path @((Join-Path $PSScriptRoot 'voice-catalog.cs'), (Join-Path $PSScriptRoot 'offline-speech.cs'), (Join-Path $PSScriptRoot 'windows-automation.cs'))
 if (-not $VoiceRoot) {
     $VoiceRoot = Join-Path $PSScriptRoot 'voice'
     if (-not (Test-Path -LiteralPath $VoiceRoot)) { $VoiceRoot = Join-Path $PSScriptRoot '../artifacts/voice-runtime' }
@@ -14,20 +14,24 @@ if ($InitializeOnly -or $RecognizeWave -or $CheckSamples) {
     if ($CheckSamples) { $CheckSamples = [IO.Path]::GetFullPath($CheckSamples) }
     [LibertyOfflineSpeech]::Initialize([IO.Path]::GetFullPath($VoiceRoot))
     if ($CheckSamples) {
+        $aliases = [LibertyVoiceCatalog]::CheckAliases()
+        Write-Output "PASS: $aliases command aliases and negative phrase mappings"
         $samples = [IO.File]::ReadAllText((Join-Path $CheckSamples 'samples.json')) | ConvertFrom-Json
         if ($samples.Count -lt 10) { throw 'Missing voice samples' }
+        $failures = @()
         foreach ($sample in $samples) {
             $result = [LibertyOfflineSpeech]::Recognize([IO.File]::ReadAllBytes((Join-Path $CheckSamples $sample.file)))
             $command = [LibertyAutomation]::Command($result.Text)
-            if (($sample.command -eq 'none' -and $command) -or ($sample.command -ne 'none' -and ($command -ne $sample.command -or $result.Confidence -lt 0.45))) { throw "Recognition failed: $($sample.file), heard: $($result.Text), command: $command" }
-            Write-Output "PASS: bundled Russian recognition $($sample.file): '$($result.Text)' -> '$command'"
+            if (($sample.command -eq 'none' -and $command) -or ($sample.command -ne 'none' -and ($command -ne $sample.command -or $result.Confidence -lt 0.45))) { $failures += "Recognition failed: $($sample.file), heard: $($result.Text), command: $command, $($result.Diagnostics)"; continue }
+            Write-Output "PASS: bundled RU/EN recognition $($sample.file): '$($result.Text)' -> '$command'"
         }
+        if ($failures.Count) { throw ($failures -join "`n") }
     } elseif ($RecognizeWave) {
         $result = [LibertyOfflineSpeech]::Recognize([IO.File]::ReadAllBytes($RecognizeWave))
         $command = [LibertyAutomation]::Command($result.Text)
-        if ($ExpectedCommand -and (($ExpectedCommand -eq 'none' -and $command) -or ($ExpectedCommand -ne 'none' -and $command -ne $ExpectedCommand))) { throw "Unexpected recognition: $($result.Text), command: $command" }
-        @{ heard = $result.Text; command = $command; confidence = $result.Confidence } | ConvertTo-Json -Compress
-    } else { Write-Output 'PASS: bundled Russian model and native engine load without SAPI or opening a microphone.' }
+        if ($ExpectedCommand -and (($ExpectedCommand -eq 'none' -and $command) -or ($ExpectedCommand -ne 'none' -and $command -ne $ExpectedCommand))) { throw "Unexpected recognition: $($result.Text), command: $command, $($result.Diagnostics)" }
+        @{ heard = $result.Text; command = $command; confidence = $result.Confidence; diagnostics = $result.Diagnostics } | ConvertTo-Json -Compress
+    } else { Write-Output 'PASS: bundled RU/EN models and native engine load without SAPI or opening a microphone.' }
     exit 0
 }
 $helper = [LibertyAutomation]::new([IO.Path]::GetFullPath($VoiceRoot))

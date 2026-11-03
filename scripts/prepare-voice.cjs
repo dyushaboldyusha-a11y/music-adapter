@@ -22,7 +22,7 @@ async function download(asset) {
 }
 async function main() {
   const runtimes = process.argv.includes('--with-linux') ? ['win-x64', 'linux-x64'] : ['win-x64'];
-  const selected = ['model', ...runtimes];
+  const selected = ['model', 'model-en', ...runtimes];
   await fs.mkdir(cache, { recursive: true });
   const stage = path.join(root, 'artifacts/.voice-stage-' + randomUUID());
   await fs.mkdir(stage);
@@ -32,7 +32,7 @@ async function main() {
       const asset = assets[key], filename = await download(asset), unpack = path.join(stage, 'unpack-' + key);
       await extract(filename, { dir: unpack });
       const from = path.join(unpack, asset.name), destination = path.join(stage, key);
-      if (key === 'model') await fs.rename(from, destination);
+      if (key.startsWith('model')) await fs.rename(from, destination);
       else {
         await fs.mkdir(destination);
         for (const name of await fs.readdir(from)) if (/\.(dll|so)$/.test(name)) await fs.copyFile(path.join(from, name), path.join(destination, name));
@@ -40,7 +40,8 @@ async function main() {
       await fs.rm(unpack, { recursive: true });
     }
     await fs.cp(path.join(root, 'licenses/voice'), path.join(stage, 'licenses'), { recursive: true });
-    for (const relative of ['model/am/final.mdl', 'model/graph/HCLr.fst', 'model/graph/Gr.fst', 'win-x64/libvosk.dll']) await fs.access(path.join(stage, relative));
+    await fs.copyFile(path.join(root, 'src/shared/voice-commands.json'), path.join(stage, 'commands.json'));
+    for (const relative of ['model/am/final.mdl', 'model/graph/HCLr.fst', 'model/graph/Gr.fst', 'model-en/am/final.mdl', 'win-x64/libvosk.dll']) await fs.access(path.join(stage, relative));
     const manifest = { format: 'liberty-wave-voice-runtime', version: 1, assets: Object.fromEntries(selected.map(key => [key, assets[key]])) };
     await fs.writeFile(path.join(stage, 'manifest.json'), JSON.stringify(manifest, null, 2));
     try {
@@ -49,7 +50,7 @@ async function main() {
       await fs.rm(output, { recursive: true });
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
     await fs.rename(stage, output);
-    console.log('PASS: offline Russian model, native libraries and license notices prepared:', output);
+    console.log('PASS: offline Russian/English models, command catalog, native libraries and licenses prepared:', output);
   } finally { await fs.rm(stage, { recursive: true, force: true }); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

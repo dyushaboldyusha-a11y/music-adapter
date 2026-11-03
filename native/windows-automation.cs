@@ -126,7 +126,7 @@ public sealed class LibertyAutomation : IDisposable {
     }
     public LibertyAutomation(string directory) { voiceDirectory = directory; }
     public void Probe() {
-        Error = ""; Language = "ru-RU";
+        Error = ""; Language = "ru-RU / en-US";
         try { Microphones = LibertyMicrophone.Devices(); } catch (Exception error) { Error = error.Message; }
         try { LibertyOfflineSpeech.Initialize(voiceDirectory); SpeechAvailable = true; }
         catch (Exception error) { SpeechAvailable = false; Error = error.Message; }
@@ -166,7 +166,7 @@ public sealed class LibertyAutomation : IDisposable {
             string command = Command(Heard);
             if (!TestMode && command != "") Commands.Enqueue(command);
         }
-        if (Phase == "processing" && (DateTime.UtcNow - processing).TotalSeconds > 10) Fail("Распознавание не завершилось. Попробуйте снова.");
+        if (Phase == "processing" && (DateTime.UtcNow - processing).TotalSeconds > 20) Fail("Распознавание не завершилось. Попробуйте снова.");
     }
     void Begin(bool test) {
         Cancel(); Probe(); TestMode = test; Heard = ""; Peak = Level = 0;
@@ -196,19 +196,7 @@ public sealed class LibertyAutomation : IDisposable {
             });
         } catch (Exception error) { Fail(error.Message); }
     }
-    public static string Command(string text) {
-        switch (text.ToLowerInvariant()) {
-            case "пауза": case "pause": return "pause";
-            case "продолжить": case "resume": return "resume";
-            case "следующий трек": case "next track": return "next";
-            case "предыдущий трек": case "previous track": return "previous";
-            case "громче": case "volume up": return "volumeUp";
-            case "тише": case "volume down": return "volumeDown";
-            case "выключить звук": case "mute": return "mute";
-            case "включить звук": case "unmute": return "unmute";
-            default: return "";
-        }
-    }
+    public static string Command(string text) { return LibertyOfflineSpeech.Resolve(text); }
     void Fail(string error) { Cancel(); Error = error; Phase = "error"; }
     void Cancel() {
         Listening = false; Phase = "idle"; TestMode = false;

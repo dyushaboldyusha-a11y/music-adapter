@@ -12,6 +12,7 @@ const { validatePreferences, exportSettings, importSettings } = require('./custo
 const { artworkColor } = require('./artwork-color.cjs');
 const { AppProfiles } = require('./app-profiles.cjs');
 const { WindowsAutomation, heldKeys, VoiceGate, normalizeAutomation } = require('./automation.cjs');
+const VOICE_COMMANDS = require('./shared/voice-commands.json');
 const { AutoHide } = require('./auto-hide.cjs');
 const { watchDisplays } = require('./display-placement.cjs');
 const { BrowserBridge } = require('./browser-bridge.cjs');
@@ -127,7 +128,7 @@ async function openMusic(provider = state.source?.provider || 'yandex', nativeAp
   catch { return { ok: false, error: 'Откройте плеер самостоятельно' }; }
 }
 function controlSnapshot() {
-  return { ...snapshot(), preferences: effectivePreferences(), displays: screen.getAllDisplays().map((d, index) => ({ id: String(d.id), name: d.label || `Монитор ${index + 1}`, width: d.workArea.width, height: d.workArea.height })), effectiveScale, version: app.getVersion(), pairedBrowsers: browserBridge?.clients.size || 0, pairing: browserBridge?.pairing || null, controlCapture, positions: Object.fromEntries(['bounds', 'compactBounds'].filter(key => effectiveSettings()[key]).map(key => [key, effectiveSettings()[key]])), appProfiles: profiles.snapshot(), automation: { ...automationState, supported: process.platform === 'win32', enabled: settings.voiceEnabled === true, microphone: settings.voiceMicrophone || 'default' } };
+  return { ...snapshot(), preferences: effectivePreferences(), displays: screen.getAllDisplays().map((d, index) => ({ id: String(d.id), name: d.label || `Монитор ${index + 1}`, width: d.workArea.width, height: d.workArea.height })), effectiveScale, version: app.getVersion(), pairedBrowsers: browserBridge?.clients.size || 0, pairing: browserBridge?.pairing || null, controlCapture, voiceCommands: VOICE_COMMANDS.commands, positions: Object.fromEntries(['bounds', 'compactBounds'].filter(key => effectiveSettings()[key]).map(key => [key, effectiveSettings()[key]])), appProfiles: profiles.snapshot(), automation: { ...automationState, supported: process.platform === 'win32', enabled: settings.voiceEnabled === true, microphone: settings.voiceMicrophone || 'default' } };
 }
 async function openControls(page = 'home') {
   if (!['home', 'sources', 'appearance', 'shortcuts', 'updates'].includes(page)) return { ok: false, error: 'Неизвестный раздел' };

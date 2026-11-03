@@ -4,6 +4,11 @@
     "url": "https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip",
     "sha256": "961d5ff98a17f4aa6de69864d0aa71fa5bac682301d2b5d17a3f24c5c99a46d4"
   },
+  "model-en": {
+    "name": "vosk-model-small-en-us-0.15",
+    "url": "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip",
+    "sha256": "30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498"
+  },
   "win-x64": {
     "name": "vosk-win64-0.3.45",
     "url": "https://github.com/alphacep/vosk-api/releases/download/v0.3.45/vosk-win64-0.3.45.zip",

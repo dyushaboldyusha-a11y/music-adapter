@@ -25,6 +25,16 @@ try {
   assert.equal(await control.locator('#voice-microphone').count(), 1);
   assert.equal(await control.locator('#microphone-test').isDisabled(), process.platform !== 'win32');
   assert.equal(await control.locator('#microphone-level').getAttribute('aria-label'), 'Уровень сигнала микрофона');
+  await control.waitForFunction(() => document.querySelectorAll('.voice-command-group').length === 8);
+  await control.locator('#voice-commands summary').click();
+  assert.equal(await control.locator('#voice-commands').getAttribute('open'), '');
+  assert.equal(await control.locator('.voice-command-group p[lang="ru"]').count(), 8);
+  assert.equal(await control.locator('.voice-command-group p[lang="en"]').count(), 8);
+  for (const phrase of ['skip', 'next', 'back', 'unmute', 'дальше', 'назад', 'прибавь громкость']) {
+    assert.ok((await control.locator('#voice-command-groups').innerText()).includes(phrase), `Missing visible synonym: ${phrase}`);
+  }
+  assert.match(await control.locator('#voice-commands').innerText(), /пожалуйста.*please/);
+  await control.locator('#voice-commands summary').click();
   const captureStart = await control.evaluate(() => libertyControl.getState());
   if (process.platform !== 'win32') assert.equal((await action('microphoneTest', true)).ok, false);
   assert.equal((await action('microphone', '../invalid')).ok, false);

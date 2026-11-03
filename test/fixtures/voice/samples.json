@@ -48,5 +48,210 @@
     "file": "noise.wav",
     "text": "",
     "command": "none"
+  },
+  {
+    "file": "en-skip.wav",
+    "text": "skip",
+    "command": "next"
+  },
+  {
+    "file": "en-next.wav",
+    "text": "next",
+    "command": "next"
+  },
+  {
+    "file": "en-back.wav",
+    "text": "back",
+    "command": "previous"
+  },
+  {
+    "file": "en-play.wav",
+    "text": "play",
+    "command": "resume"
+  },
+  {
+    "file": "en-pause.wav",
+    "text": "pause",
+    "command": "pause"
+  },
+  {
+    "file": "en-stop.wav",
+    "text": "stop",
+    "command": "pause"
+  },
+  {
+    "file": "en-resume.wav",
+    "text": "resume",
+    "command": "resume"
+  },
+  {
+    "file": "en-mute.wav",
+    "text": "mute",
+    "command": "mute"
+  },
+  {
+    "file": "en-unmute.wav",
+    "text": "unmute",
+    "command": "unmute"
+  },
+  {
+    "file": "en-louder.wav",
+    "text": "louder",
+    "command": "volumeUp"
+  },
+  {
+    "file": "en-quieter.wav",
+    "text": "quieter",
+    "command": "volumeDown"
+  },
+  {
+    "file": "en-volume-up.wav",
+    "text": "volume up",
+    "command": "volumeUp"
+  },
+  {
+    "file": "en-volume-down.wav",
+    "text": "volume down",
+    "command": "volumeDown"
+  },
+  {
+    "file": "en-next-song.wav",
+    "text": "next song",
+    "command": "next"
+  },
+  {
+    "file": "en-previous-track.wav",
+    "text": "previous track",
+    "command": "previous"
+  },
+  {
+    "file": "en-turn-up.wav",
+    "text": "turn it up",
+    "command": "volumeUp"
+  },
+  {
+    "file": "en-turn-down.wav",
+    "text": "turn it down",
+    "command": "volumeDown"
+  },
+  {
+    "file": "en-sound-on.wav",
+    "text": "sound on",
+    "command": "unmute"
+  },
+  {
+    "file": "en-sound-off.wav",
+    "text": "sound off",
+    "command": "mute"
+  },
+  {
+    "file": "en-please.wav",
+    "text": "please skip",
+    "command": "next"
+  },
+  {
+    "file": "ru-dalshe.wav",
+    "text": "дальше",
+    "command": "next"
+  },
+  {
+    "file": "ru-nazad.wav",
+    "text": "назад",
+    "command": "previous"
+  },
+  {
+    "file": "ru-pause.wav",
+    "text": "поставь на паузу",
+    "command": "pause"
+  },
+  {
+    "file": "ru-play.wav",
+    "text": "включи музыку",
+    "command": "resume"
+  },
+  {
+    "file": "ru-stop.wav",
+    "text": "останови",
+    "command": "pause"
+  },
+  {
+    "file": "ru-louder.wav",
+    "text": "погромче",
+    "command": "volumeUp"
+  },
+  {
+    "file": "ru-quieter.wav",
+    "text": "потише",
+    "command": "volumeDown"
+  },
+  {
+    "file": "ru-volume-up.wav",
+    "text": "прибавь громкость",
+    "command": "volumeUp"
+  },
+  {
+    "file": "ru-volume-down.wav",
+    "text": "убавь громкость",
+    "command": "volumeDown"
+  },
+  {
+    "file": "ru-unmute.wav",
+    "text": "верни звук",
+    "command": "unmute"
+  },
+  {
+    "file": "ru-mute.wav",
+    "text": "убери звук",
+    "command": "mute"
+  },
+  {
+    "file": "ru-continue.wav",
+    "text": "продолжай",
+    "command": "resume"
+  },
+  {
+    "file": "ru-next-song.wav",
+    "text": "следующая песня",
+    "command": "next"
+  },
+  {
+    "file": "ru-previous.wav",
+    "text": "предыдущая",
+    "command": "previous"
+  },
+  {
+    "file": "ru-please.wav",
+    "text": "пожалуйста громче",
+    "command": "volumeUp"
+  },
+  {
+    "file": "ru-forward.wav",
+    "text": "вперёд",
+    "command": "next"
+  },
+  {
+    "file": "negative-ru.wav",
+    "text": "не переключай музыку",
+    "command": "none"
+  },
+  {
+    "file": "negative-weather.wav",
+    "text": "сегодня хорошая погода",
+    "command": "none"
+  },
+  {
+    "file": "negative-en.wav",
+    "text": "do not skip",
+    "command": "none"
+  },
+  {
+    "file": "negative-please.wav",
+    "text": "please don't stop",
+    "command": "none"
+  },
+  {
+    "file": "negative-greeting.wav",
+    "text": "how are you",
+    "command": "none"
   }
 ]

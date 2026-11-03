@@ -12,9 +12,10 @@
       <progress id="microphone-level" class="microphone-level" max="1" value="0" aria-label="Уровень сигнала микрофона"></progress><p id="microphone-status" class="footnote" role="status">Проверка длится 3 секунды. Произнесите команду; музыка останется без изменений.</p>
       <p id="voice-status" role="status" aria-live="polite" class="footnote"></p>
       <p class="footnote">Удерживайте клавишу, произнесите команду и отпустите. Микрофон закрывается при отпускании; распознавание завершает обработку фразы. Одна команда на удержание, максимум 15 секунд. Звук не сохраняется и не отправляется в сеть.</p>
-      <p id="voice-commands" class="footnote"></p></div>`;
+      <p class="footnote">Русский и английский распознаватели уже встроены. Язык команды определяется автоматически; интернет и SAPI не нужны.</p>
+      <details id="voice-commands" class="voice-command-list"><summary>Команды и синонимы · русский / English</summary><p class="footnote">Можно добавить «пожалуйста» или please в начале или конце команды. Стоп / stop ставит музыку на паузу.</p><div id="voice-command-groups"></div></details></div>`;
     $('page-home').append(panel);
-    let state, listKey = '', microphoneKey = '';
+    let state, listKey = '', microphoneKey = '', commandKey = '';
     function save(items, enabled = state.appProfiles.enabled) { return action('profiles', { enabled, items }); }
     $('profiles-enabled').addEventListener('change', () => save(state.appProfiles.items, $('profiles-enabled').checked));
     $('voice-enabled').addEventListener('change', () => action('voice', $('voice-enabled').checked));
@@ -50,7 +51,17 @@
       $('microphone-level').value = voice.level || 0;
       $('microphone-status').textContent = voice.test && voice.listening ? 'Проверка: говорите в выбранный микрофон…' : voice.test && voice.phase === 'processing' ? 'Микрофон закрыт. Распознаю тестовую фразу…' : voice.test && ['tested', 'recognized'].includes(voice.phase) ? (voice.peak > .01 ? 'Сигнал получен.' : 'Сигнал не обнаружен. Проверьте устройство и разрешения Windows.') + (voice.heard ? ` Распознано: «${voice.heard}».` : '') + ' Команды плееру не отправлялись.' : 'Проверка длится 3 секунды. Произнесите команду; музыка останется без изменений.';
       $('voice-status').textContent = !voice.supported ? 'Распознавание доступно в Windows.' : voice.error || (!voice.enabled ? 'Голосовое управление выключено. Микрофон можно проверить отдельно.' : !state.shortcuts.bindings.voiceHold ? 'Назначьте клавишу для голоса в разделе «Горячие клавиши».' : !state.shortcuts.available.voiceHold ? 'Голосовое сочетание занято или недоступно. Назначьте другое.' : voice.listening ? `Слушаю · ${voice.language}` : voice.phase === 'processing' ? 'Микрофон закрыт. Распознаю команду…' : voice.heard ? `Распознано: «${voice.heard}».` : `Удерживайте назначенное сочетание и произнесите команду. Язык: ${voice.language || 'проверяется'}.`);
-      $('voice-commands').textContent = 'Русский распознаватель уже встроен. SAPI, дополнительная установка и интернет не нужны. Команды: «пауза», «продолжить», «следующий трек», «предыдущий трек», «громче», «тише», «выключить звук», «включить звук».';
+      const commands = state.voiceCommands || [], commandsKey = JSON.stringify(commands);
+      if (commandsKey !== commandKey) {
+        commandKey = commandsKey; $('voice-command-groups').replaceChildren();
+        for (const command of commands) {
+          const row = document.createElement('div'); row.className = 'voice-command-group';
+          const label = document.createElement('strong'); label.textContent = command.label;
+          const russian = document.createElement('p'); russian.lang = 'ru'; russian.textContent = command.ru.join(' · ');
+          const english = document.createElement('p'); english.lang = 'en'; english.textContent = command.en.join(' · ');
+          row.append(label, russian, english); $('voice-command-groups').append(row);
+        }
+      }
       const key = JSON.stringify(p.items.map(item => [item.executable, item.name]));
       if (key !== listKey) {
         listKey = key; $('profile-list').replaceChildren();

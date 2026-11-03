@@ -2,7 +2,8 @@ Liberty Wave offline voice components
 
 Vosk API 0.3.45, Copyright Alpha Cephei Inc. and contributors.
 Russian model vosk-model-small-ru-0.22, published by Alpha Cephei.
-Both are distributed under the Apache License 2.0 (APACHE-2.0.txt).
+English model vosk-model-small-en-us-0.15, published by Alpha Cephei.
+The API and both models are distributed under the Apache License 2.0 (APACHE-2.0.txt).
 Sources: https://github.com/alphacep/vosk-api/tree/v0.3.45
 Model and license listing: https://alphacephei.com/vosk/models
 

@@ -32,7 +32,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run voice:prepare
-      - name: Check bundled Russian recognition without SAPI
+      - name: Check bundled Russian and English recognition without SAPI
         run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File native/windows-automation.ps1 -CheckSamples test/fixtures/voice
       - run: npm test
       - name: Check Windows integrations
