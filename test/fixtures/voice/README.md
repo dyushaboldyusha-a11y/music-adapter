@@ -1,5 +1,5 @@
-These 49 speech recordings were synthesized for integration tests: 47 with
-eSpeak NG 1.52.0 and two with Piper 1.3.0. FFmpeg converts the output to 16 kHz
+These 49 speech recordings were synthesized for integration tests: 31 with
+eSpeak NG 1.52.0 and 18 with Piper 1.3.0. FFmpeg converts the output to 16 kHz
 signed 16-bit mono PCM. They contain no microphone recordings or personal data.
 Silence and fixed-seed white noise are generated signals. The 8 original
 Russian command recordings are preserved unchanged.
@@ -10,9 +10,6 @@ Synthesis: `espeak-ng -v VOICE -s RATE -w raw.wav TEXT`, followed by
 `ffmpeg -i raw.wav -ar 16000 -ac 1 -acodec pcm_s16le output.wav`.
 
 - Original 8 Russian commands: `ru`, 135 words/minute.
-- New Russian positives and negatives: `ru`, 135 words/minute, except:
-  - `ru-forward.wav`: `ru+m3`, 160 words/minute.
-  - `ru-dalshe.wav` and `ru-nazad.wav`: Piper, described below.
 - New English positives and negatives: `en-us`, 135 words/minute, except:
   - `en-quieter.wav`: `en-us+m3`, 160 words/minute.
   - `en-volume-down.wav`: `en-us+f3`, 160 words/minute.
@@ -20,12 +17,17 @@ Synthesis: `espeak-ng -v VOICE -s RATE -w raw.wav TEXT`, followed by
 
 ## Piper recordings
 
-`ru-dalshe.wav` and `ru-nazad.wav` contain exactly the same command words as
-before: "Дальше." and "Назад.". They were generated with Piper 1.3.0 and
+All new Russian recordings (`ru-*.wav`, `negative-ru.wav` and
+`negative-weather.wav`) were generated with Piper 1.3.0 and
 `ru_RU-denis-medium`, CPU ONNX Runtime 1.31.1, seed 42, length scale 1.0 and
-other default synthesis settings, then converted with FFmpeg as above. Clearer
-synthesis replaces the earlier robotic recordings, which were not reliably
-intelligible to the full Russian decoder. Expected actions are unchanged.
+other default synthesis settings, then converted with FFmpeg as above.
+Text is the manifest phrase with its first letter capitalized and a final
+period. The 18 files were generated in manifest order, in one session with
+`intra_op_num_threads=2` and `inter_op_num_threads=1`.
+
+Clearer synthesis replaces robotic recordings that were not reliably
+intelligible to the full Russian decoder. The original eight Russian files,
+manifest phrases and all expected actions are preserved.
 
 Model repository: https://huggingface.co/rhasspy/piper-voices
 Revision: `e7229f7d33a10e145e109b886d661984201ac3c4`
