@@ -146,7 +146,7 @@ public static class LibertyOfflineSpeech {
     }
     static bool Plausible(Result constrained, Result unrestricted) {
         string command = LibertyVoiceCatalog.Normalize(constrained.Text), heard = LibertyVoiceCatalog.Normalize(unrestricted.Text);
-        return heard.Split(' ').Length < 3 || LibertyVoiceCatalog.Similarity(command, heard) >= .4;
+        return unrestricted.Text.Split(new [] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length < 3 || LibertyVoiceCatalog.Similarity(command, heard) >= .4;
     }
     static Result RecognizeModel(IntPtr handle, byte[] grammar, byte[] wave, int start, int length) {
         IntPtr recognizer = grammar == null ? newRecognizer(handle, 16000) : newCommandRecognizer(handle, 16000, grammar);
