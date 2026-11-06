@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading;
 
 // Poll completed WinMM buffers on the controller thread. No managed code runs
-// in a driver callback, and no microphone remains open during recognition.
+// in a driver callback. Wake mode drains every frame into a bounded segmenter.
 public sealed class LibertyMicrophone : IDisposable {
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     struct Caps { public ushort mid, pid; public uint version; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string name; public uint formats; public ushort channels, reserved; }
@@ -78,6 +78,7 @@ public sealed class LibertyMicrophone : IDisposable {
         }
         Level = Math.Max(level, Level * .75); Peak = Math.Max(Peak, level);
     }
+    public byte[] DrainAudio() { byte[] bytes = audio.ToArray(); audio.SetLength(0); return bytes; }
     public MemoryStream Finish() {
         Check(waveInStop(handle)); Check(waveInReset(handle)); Pump(false); Close();
         var wave = new MemoryStream(); var writer = new BinaryWriter(wave, Encoding.ASCII, true);
@@ -102,21 +103,24 @@ public sealed class LibertyAutomation : IDisposable {
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint id);
     [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
-    public string Foreground = "", Error = "", Language = "", Phase = "idle", Heard = "";
-    public bool Listening, TestMode, SpeechAvailable;
+    public string Foreground = "", Error = "", Language = "", Phase = "idle", Heard = "", Mode = "hold";
+    public bool Listening, TestMode, SpeechAvailable, Activated;
     public double Level, Peak;
-    public long Session;
+    public long Session, Configuration;
     public string[] Microphones = new string[0];
     public readonly ConcurrentQueue<string> Commands = new ConcurrentQueue<string>(), Lines = new ConcurrentQueue<string>();
     public volatile bool InputClosed;
-    sealed class Result { public long session; public string text, error; public float confidence; }
+    sealed class Result { public long session, epoch; public string text, error; public float confidence; public bool activated; }
     readonly ConcurrentQueue<Result> results = new ConcurrentQueue<Result>();
+    readonly LibertySpeechActivity activity = new LibertySpeechActivity();
     readonly string voiceDirectory;
     LibertyMicrophone capture;
-    bool monitor, voice, armed;
+    bool monitor, voice, armed, wakeCapture;
+    int decoderBusy;
+    long epoch;
     int[] keys = new int[0];
     string device = "default";
-    DateTime started, processing, lastForeground = DateTime.MinValue;
+    DateTime started, processing, resumeAt, lastForeground = DateTime.MinValue;
     public void StartInput() {
         var thread = new Thread(() => {
             try { using (var reader = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false), true)) {
@@ -130,9 +134,10 @@ public sealed class LibertyAutomation : IDisposable {
         try { Microphones = LibertyMicrophone.Devices(); } catch (Exception error) { Error = error.Message; }
         try { LibertyOfflineSpeech.Initialize(voiceDirectory); SpeechAvailable = true; }
         catch (Exception error) { SpeechAvailable = false; Error = error.Message; }
+        if (voice && capture == null && Phase == "error" && SpeechAvailable) Phase = "idle";
     }
-    public void Configure(bool monitorEnabled, bool voiceEnabled, int[] chord, string selected) {
-        Cancel(); monitor = monitorEnabled; voice = voiceEnabled; keys = chord;
+    public void Configure(bool monitorEnabled, bool voiceEnabled, int[] chord, string selected, string mode = "hold", long revision = 0) {
+        Cancel(); Configuration = revision; monitor = monitorEnabled; voice = voiceEnabled; keys = chord ?? new int[0]; Mode = mode == "wake" ? "wake" : "hold";
         device = String.IsNullOrEmpty(selected) ? "default" : selected; armed = false; Probe();
     }
     bool Down() {
@@ -142,64 +147,81 @@ public sealed class LibertyAutomation : IDisposable {
             else if ((GetAsyncKeyState(key) & 0x8000) == 0) return false;
         } return true;
     }
-    public void Test(bool enabled) { if (enabled) Begin(true); else if (TestMode && capture != null) Finish(); }
+    public void Test(bool enabled, long revision = -1) { if (revision >= 0) Configuration = revision; if (enabled) Begin(true, false); else if (TestMode && capture != null) Finish(); else Cancel(); }
     public void Tick() {
+        Result result;
+        while (results.TryDequeue(out result)) {
+            if (result.epoch != Interlocked.Read(ref epoch) || result.session != Session || Phase != "processing") continue;
+            Heard = result.text ?? ""; Activated = result.activated; Phase = "recognized"; resumeAt = DateTime.UtcNow.AddSeconds(2);
+            if (!String.IsNullOrEmpty(result.error)) { Fail(result.error); return; }
+            string command = Command(Heard);
+            if (wakeCapture && !Activated) { Heard = ""; Error = ""; Phase = "waiting"; return; }
+            if (command == "" || result.confidence < .45f) Error = "Команда не распознана. Повторите фразу отчётливо.";
+            else { Error = ""; if (!TestMode) Commands.Enqueue(command); }
+            // Publish this result with its original session before another
+            // utterance may start. Never attach it to a newer source/session.
+            return;
+        }
         if (monitor && (DateTime.UtcNow - lastForeground).TotalMilliseconds >= 250) {
             lastForeground = DateTime.UtcNow;
             try { uint id; GetWindowThreadProcessId(GetForegroundWindow(), out id); using (var process = Process.GetProcessById((int)id)) Foreground = process.ProcessName + ".exe"; } catch { Foreground = ""; }
         } else if (!monitor) Foreground = "";
-        bool down = voice && Down();
+        if (TestMode && capture == null && Phase != "processing" && DateTime.UtcNow >= resumeAt) { TestMode = false; Phase = "idle"; }
+        bool wake = voice && Mode == "wake", down = voice && Mode == "hold" && Down();
         if (!down) armed = true;
         if (capture != null) {
             try {
                 capture.Pump(true); Level = capture.Level; Peak = capture.Peak;
-                if ((!TestMode && !down) || (DateTime.UtcNow - started).TotalSeconds >= (TestMode ? 3 : 15)) Finish();
+                if (wakeCapture) {
+                    byte[] frame = capture.DrainAudio();
+                    if (Phase != "processing" && Volatile.Read(ref decoderBusy) == 0) {
+                        bool began; byte[] utterance = activity.Add(frame, out began);
+                        if (began) { Session++; Activated = false; Heard = Error = ""; Phase = "listening"; }
+                        if (utterance != null) Decode(LibertySpeechActivity.Wave(utterance), true);
+                        else if (!activity.Speaking && Phase == "listening") Phase = "waiting";
+                    }
+                    if (Phase == "recognized" && DateTime.UtcNow >= resumeAt) { Phase = "waiting"; Activated = false; Error = ""; }
+                } else if ((!TestMode && !down) || (DateTime.UtcNow - started).TotalSeconds >= (TestMode ? 3 : 15)) Finish();
             } catch (Exception error) { Fail(error.Message); }
-        } else if (down && armed && Phase != "processing") { armed = false; Begin(false); }
-        Result result;
-        while (results.TryDequeue(out result)) {
-            if (result.session != Session || Phase != "processing") continue;
-            Heard = result.text ?? ""; Phase = "recognized";
-            if (!String.IsNullOrEmpty(result.error)) { Fail(result.error); continue; }
-            if (String.IsNullOrEmpty(Heard) || result.confidence < 0.45f || Command(Heard) == "") { Error = "Команда не распознана. Произнесите команду целиком и отпустите клавишу."; continue; }
-            Error = "";
-            string command = Command(Heard);
-            if (!TestMode && command != "") Commands.Enqueue(command);
-        }
+        } else if (wake && !TestMode && Phase != "processing" && Phase != "error") Begin(false, true);
+        else if (down && armed && Phase != "processing" && Volatile.Read(ref decoderBusy) == 0) { armed = false; Begin(false, false); }
         if (Phase == "processing" && (DateTime.UtcNow - processing).TotalSeconds > 20) Fail("Распознавание не завершилось. Попробуйте снова.");
     }
-    void Begin(bool test) {
+    void Begin(bool test, bool continuous) {
         Cancel(); Probe(); TestMode = test; Heard = ""; Peak = Level = 0;
         try {
             if (!test && !SpeechAvailable) { Phase = "error"; return; }
             LibertyMicrophone.Validate(device);
-            if (!test && !Down()) return;
-            capture = new LibertyMicrophone(device); Session++; Listening = true; Phase = "listening"; started = DateTime.UtcNow;
+            if (!test && !continuous && !Down()) return;
+            capture = new LibertyMicrophone(device); Session++; Listening = true; wakeCapture = continuous;
+            Phase = continuous ? "waiting" : "listening"; started = DateTime.UtcNow;
         } catch (Exception error) { Fail(error.Message); }
+    }
+    void Decode(byte[] bytes, bool requireWake) {
+        if (Interlocked.CompareExchange(ref decoderBusy, 1, 0) != 0) { Phase = wakeCapture ? "waiting" : "idle"; return; }
+        long session = Session, generation = Interlocked.Read(ref epoch); Phase = "processing"; processing = DateTime.UtcNow;
+        ThreadPool.QueueUserWorkItem(ignored => {
+            var result = new Result { session = session, epoch = generation };
+            try {
+                var decoded = LibertyOfflineSpeech.Recognize(bytes, requireWake);
+                result.text = decoded.Text; result.confidence = decoded.Confidence; result.activated = decoded.Activated;
+            } catch (Exception error) { result.error = error.Message; }
+            finally { results.Enqueue(result); Volatile.Write(ref decoderBusy, 0); }
+        });
     }
     void Finish() {
         try {
             byte[] bytes;
             using (var wave = capture.Finish()) bytes = wave.ToArray();
             Peak = capture.Peak; capture.Dispose(); capture = null; Listening = false; Level = 0;
-            if (!SpeechAvailable) { Phase = "tested"; return; }
-            long session = Session; Phase = "processing"; processing = DateTime.UtcNow;
-            // Capture is closed before decoding the in-memory buffer. No audio
-            // is written to disk, and results remain bound to the held session.
-            ThreadPool.QueueUserWorkItem(ignored => {
-                var result = new Result { session = session };
-                try {
-                    var decoded = LibertyOfflineSpeech.Recognize(bytes);
-                    result.text = decoded.Text; result.confidence = decoded.Confidence;
-                } catch (Exception error) { result.error = error.Message; }
-                results.Enqueue(result);
-            });
+            if (!SpeechAvailable) { Phase = "tested"; resumeAt = DateTime.UtcNow.AddSeconds(2); return; }
+            Decode(bytes, false);
         } catch (Exception error) { Fail(error.Message); }
     }
     public static string Command(string text) { return LibertyOfflineSpeech.Resolve(text); }
     void Fail(string error) { Cancel(); Error = error; Phase = "error"; }
     void Cancel() {
-        Listening = false; Phase = "idle"; TestMode = false;
+        Interlocked.Increment(ref epoch); Session++; Level = 0; Listening = Activated = false; Phase = "idle"; TestMode = wakeCapture = false; activity.Reset();
         if (capture != null) { capture.Dispose(); capture = null; }
         Result result; while (results.TryDequeue(out result)) { }
         string ignored; while (Commands.TryDequeue(out ignored)) { }

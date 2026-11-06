@@ -7,17 +7,20 @@
       <p id="profile-status" role="status" class="footnote"></p><div id="profile-list"></div>
       <form id="profile-form"><label for="profile-name">Название профиля</label><input id="profile-name" type="text" maxlength="60" required placeholder="Моя игра"><label for="profile-exe">Исполняемый файл</label><input id="profile-exe" type="text" maxlength="160" required placeholder="game.exe" spellcheck="false"><div class="button-row"><button class="primary">Сохранить текущий вид для приложения</button></div></form>
       <p class="footnote">Без подходящего профиля используются обычные настройки. Когда профиль активен, изменения оформления сохраняются в нём. Повторное сохранение заменяет профиль этого приложения.</p></div>
-      <h3 class="section-title">Локальные голосовые команды</h3><div class="card personal-card"><label class="setting-row"><span><strong>Голос при удержании клавиши</strong><small>Назначьте «Голос» в разделе «Горячие клавиши»</small></span><input id="voice-enabled" type="checkbox" class="switch"></label>
+      <h3 class="section-title">Локальные голосовые команды</h3><div class="card personal-card"><label class="setting-row"><span><strong>Голосовое управление</strong><small id="voice-mode-hint">Wave / вейв — без клавиши</small></span><input id="voice-enabled" type="checkbox" class="switch"></label>
+      <label for="voice-mode">Активация голоса</label><select id="voice-mode" class="voice-mode"><option value="wake">По слову Wave / вейв — без клавиши</option><option value="hold">При удержании клавиши</option></select>
+      <p id="voice-mode-description" class="footnote"></p>
       <label for="voice-microphone">Микрофон</label><div class="microphone-controls"><select id="voice-microphone" aria-label="Микрофон для голосовых команд"></select><button id="microphone-refresh" type="button">Обновить</button><button id="microphone-test" type="button">Проверить микрофон</button></div>
       <progress id="microphone-level" class="microphone-level" max="1" value="0" aria-label="Уровень сигнала микрофона"></progress><p id="microphone-status" class="footnote" role="status">Проверка длится 3 секунды. Произнесите команду; музыка останется без изменений.</p>
       <p id="voice-status" role="status" aria-live="polite" class="footnote"></p>
-      <p class="footnote">Удерживайте клавишу, произнесите команду и отпустите. Микрофон закрывается при отпускании; распознавание завершает обработку фразы. Одна команда на удержание, максимум 15 секунд. Звук не сохраняется и не отправляется в сеть.</p>
+      <p class="footnote">Точная громкость: «громкость тридцать процентов», «прибавь десять», «убавь вдвое», volume fifty percent. В режиме Wave добавьте обращение в начале: «Вейв, громкость тридцать процентов». Уровень меняется у выбранного плеера.</p>
       <p class="footnote">Русский и английский распознаватели уже встроены. Язык команды определяется автоматически; интернет и SAPI не нужны.</p>
-      <details id="voice-commands" class="voice-command-list"><summary>Команды и синонимы · русский / English</summary><p class="footnote">Можно добавить «пожалуйста» или please в начале или конце команды. Стоп / stop ставит музыку на паузу.</p><div id="voice-command-groups"></div></details></div>`;
+      <details id="voice-commands" class="voice-command-list"><summary>Команды и синонимы · русский / English</summary><p class="footnote">Обращение Wave ставьте первым. После него или в конце команды можно сказать «пожалуйста» или please. Стоп / stop ставит музыку на паузу.</p><div id="voice-command-groups"></div></details></div>`;
     $('page-home').append(panel);
     let state, listKey = '', microphoneKey = '', commandKey = '';
     function save(items, enabled = state.appProfiles.enabled) { return action('profiles', { enabled, items }); }
     $('profiles-enabled').addEventListener('change', () => save(state.appProfiles.items, $('profiles-enabled').checked));
+    $('voice-mode').addEventListener('change', () => action('voiceMode', $('voice-mode').value));
     $('voice-enabled').addEventListener('change', () => action('voice', $('voice-enabled').checked));
     $('voice-microphone').addEventListener('change', () => action('microphone', $('voice-microphone').value));
     $('microphone-refresh').addEventListener('click', () => action('microphoneRefresh'));
@@ -35,7 +38,10 @@
       $('profiles-enabled').checked = p.enabled; $('profiles-enabled').disabled = !voice.supported;
       $('voice-enabled').checked = voice.enabled; $('voice-enabled').disabled = !voice.supported;
       $('profile-status').textContent = !voice.supported ? 'Переключение профилей доступно в Windows. Здесь можно подготовить профили.' : p.active ? `Активен: ${p.items.find(item => item.executable === p.active)?.name}` : `Обычные настройки${p.foreground ? ' · ' + p.foreground : ''}`;
-      const busy = voice.listening || voice.phase === 'processing';
+      $('voice-mode').value = voice.mode || 'wake';
+      $('voice-mode-hint').textContent = voice.mode === 'hold' ? 'Назначьте «Голос» в разделе «Горячие клавиши»' : 'Скажите Wave / вейв и команду одной фразой';
+      $('voice-mode-description').textContent = voice.mode === 'hold' ? 'Удерживайте клавишу, произнесите команду и отпустите. Микрофон закрывается при отпускании. Одна команда на удержание, максимум 15 секунд.' : 'Пока голос включён, микрофон постоянно слушает локально. Произнесите «Вейв, следующий трек» или «Wave, next» одной фразой. Без обращения команды не выполняются. Выключатель выше закрывает микрофон. Звук не сохраняется и не отправляется в сеть.';
+      const busy = voice.test && (voice.listening || voice.phase === 'processing') || voice.mode !== 'wake' && voice.listening;
       const micKey = JSON.stringify([voice.microphones, voice.microphone]);
       if (micKey !== microphoneKey) {
         microphoneKey = micKey;
@@ -46,11 +52,11 @@
       }
       $('voice-microphone').disabled = !voice.supported || busy;
       $('microphone-refresh').disabled = !voice.supported || busy;
-      $('microphone-test').disabled = !voice.supported || voice.phase === 'processing' || voice.listening && !voice.test;
+      $('microphone-test').disabled = !voice.supported || voice.phase === 'processing' || voice.mode !== 'wake' && voice.listening && !voice.test;
       $('microphone-test').textContent = voice.test && voice.listening ? 'Остановить проверку' : 'Проверить микрофон';
       $('microphone-level').value = voice.level || 0;
       $('microphone-status').textContent = voice.test && voice.listening ? 'Проверка: говорите в выбранный микрофон…' : voice.test && voice.phase === 'processing' ? 'Микрофон закрыт. Распознаю тестовую фразу…' : voice.test && ['tested', 'recognized'].includes(voice.phase) ? (voice.peak > .01 ? 'Сигнал получен.' : 'Сигнал не обнаружен. Проверьте устройство и разрешения Windows.') + (voice.heard ? ` Распознано: «${voice.heard}».` : '') + ' Команды плееру не отправлялись.' : 'Проверка длится 3 секунды. Произнесите команду; музыка останется без изменений.';
-      $('voice-status').textContent = !voice.supported ? 'Распознавание доступно в Windows.' : voice.error || (!voice.enabled ? 'Голосовое управление выключено. Микрофон можно проверить отдельно.' : !state.shortcuts.bindings.voiceHold ? 'Назначьте клавишу для голоса в разделе «Горячие клавиши».' : !state.shortcuts.available.voiceHold ? 'Голосовое сочетание занято или недоступно. Назначьте другое.' : voice.listening ? `Слушаю · ${voice.language}` : voice.phase === 'processing' ? 'Микрофон закрыт. Распознаю команду…' : voice.heard ? `Распознано: «${voice.heard}».` : `Удерживайте назначенное сочетание и произнесите команду. Язык: ${voice.language || 'проверяется'}.`);
+      $('voice-status').textContent = !voice.supported ? 'Распознавание доступно в Windows.' : voice.error || (!voice.enabled ? 'Голосовое управление выключено. Микрофон можно проверить отдельно.' : voice.feedback && voice.feedback.until > Date.now() ? voice.feedback.text : voice.phase === 'processing' ? 'Распознаю команду…' : voice.mode === 'wake' ? 'Микрофон включён. Жду «Wave / вейв» и команду.' : !state.shortcuts.bindings.voiceHold ? 'Назначьте клавишу для голоса в разделе «Горячие клавиши».' : !state.shortcuts.available.voiceHold ? 'Голосовое сочетание занято или недоступно. Назначьте другое.' : voice.listening ? 'Слушаю…' : voice.heard ? `Распознано: «${voice.heard}».` : 'Удерживайте назначенное сочетание и произнесите команду.');
       const commands = state.voiceCommands || [], commandsKey = JSON.stringify(commands);
       if (commandsKey !== commandKey) {
         commandKey = commandsKey; $('voice-command-groups').replaceChildren();

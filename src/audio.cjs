@@ -24,12 +24,19 @@ class VolumeQueue {
   constructor(getState, command) { this.getState = getState; this.command = command; this.pending = Promise.resolve(); }
   step(delta) { return this.enqueue('volume', delta); }
   mute() { return this.enqueue('mute'); }
+  set(value) { return Number.isFinite(value) && value >= 0 && value <= 1 ? this.enqueue('set', value) : Promise.resolve({ ok: false }); }
+  scale(value) { return [0.5, 2].includes(value) ? this.enqueue('scale', value) : Promise.resolve({ ok: false }); }
   enqueue(action, delta) {
     const source = this.getState().source?.id;
     this.pending = this.pending.catch(() => {}).then(async () => {
       const state = this.getState();
       if (!source || state.source?.id !== source || !state.connected) return { ok: false };
-      if (action === 'volume' && Number.isFinite(state.volume)) return this.command('volume', Math.round(Math.max(0, Math.min(1, state.volume + delta)) * 100) / 100);
+      if (action === 'set' || ['volume', 'scale'].includes(action) && Number.isFinite(state.volume)) {
+        const requested = action === 'set' ? delta : action === 'scale' ? state.volume * delta : state.volume + delta;
+        const volume = Math.round(Math.max(0, Math.min(1, requested)) * 100) / 100;
+        const result = await this.command('volume', volume);
+        return { ...result, volume };
+      }
       if (action === 'mute') return this.command('mute', !state.muted);
       return { ok: false };
     });

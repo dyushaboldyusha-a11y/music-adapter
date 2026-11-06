@@ -10,7 +10,7 @@ function sourceLabel(source) { return `${source.name} · ${source.kind === 'app'
 function update(next) {
   if (!next) return;
   if (state.source?.id !== next.source?.id || !next.interaction) { clearTimeout(volumeTimer); volumeEditing = false; }
-  state = next; playbackClock.update(next);
+  state = next; playbackClock.update(next); paintVoice();
   document.body.classList.toggle('compact', state.compact === true);
   document.body.classList.toggle('has-rhythm-bars', state.preferences?.rhythmBars === true);
   audioWave.update(state.preferences, { visible: !state.autoHidden, source: state.source?.id, playing: state.connected && state.playing && !state.muted });
@@ -94,7 +94,15 @@ $('shuffle').addEventListener('click', () => command('shuffle', !state.shuffle))
 $('repeat').addEventListener('click', () => command('repeat', { none: 'list', list: 'track', track: 'none' }[state.repeat] || 'none'));
 $('menu').addEventListener('click', () => bridge.openControls('home'));
 $('artwork').addEventListener('error', () => { currentArtwork = null; $('artwork').hidden = true; $('cover-placeholder').hidden = false; });
-bridge.onState(update);
+const detachState = bridge.onState(update);
+window.addEventListener('pagehide', detachState, { once: true });
 bridge.getState().then(update);
 document.addEventListener('wheel', event => { if (event.ctrlKey) event.preventDefault(); }, { passive: false });
 setInterval(paintProgress, 200);
+
+function paintVoice() {
+  const view = LibertyVoiceStatus.status(state.voice), badge = $('voice-indicator');
+  badge.hidden = !view.visible; badge.dataset.tone = view.tone;
+  $('voice-indicator-text').textContent = view.text;
+  badge.setAttribute('aria-label', view.text);
+}

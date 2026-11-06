@@ -30,6 +30,23 @@ async function main() {
       assert.equal(failed.listening, false); assert.equal(failed.phase, 'error');
       assert.match(failed.error, /микрофон/i);
     }
+    if (process.platform === 'win32') {
+      const rejected = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { bridge.off('state', listener); reject(Error('Wake mode did not start without a binding')); }, 10000);
+        const listener = value => { if (value.mode === 'wake' && value.phase === 'error') { clearTimeout(timer); bridge.off('state', listener); resolve(value); } };
+        bridge.on('state', listener);
+      });
+      await bridge.request('configure', { monitor: false, voice: true, mode: 'wake', keys: [], microphone: '999' });
+      const state = await rejected;
+      assert.equal(state.listening, false); assert.match(state.error, /микрофон/i);
+      const stopped = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { bridge.off('state', listener); reject(Error('Wake mode did not stop')); }, 10000);
+        const listener = value => { if (value.mode === 'wake' && value.phase === 'idle' && !value.listening) { clearTimeout(timer); bridge.off('state', listener); resolve(); } };
+        bridge.on('state', listener);
+      });
+      await bridge.request('configure', { monitor: false, voice: false, mode: 'wake', keys: [], microphone: 'default' });
+      await stopped;
+    }
     await new Promise(resolve => setTimeout(resolve, 250));
     await bridge.request('configure', { monitor: false, voice: false, keys: [] });
     console.log('PASS: native automation runs with stdin idle, accepts repeated UTF-8 configuration and never opens a microphone while disabled.');

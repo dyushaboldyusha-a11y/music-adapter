@@ -65,3 +65,12 @@ test('audio wave remains one closed contour, settles in silence, and responds to
     assert.equal((d.match(/M/g) || []).length, 1);
   }
 });
+test('exact volume, percentage steps and halving preserve queue order and clamp bounds', async () => {
+  const state = { connected: true, source: { id: 'player' }, volume: .8 }, calls = [];
+  const queue = new VolumeQueue(() => state, async (action, value) => { calls.push([action, value]); state.volume = value; return { ok: true }; });
+  await Promise.all([queue.set(.3), queue.step(.1), queue.scale(.5)]);
+  assert.deepEqual(calls, [['volume', .3], ['volume', .4], ['volume', .2]]);
+  await queue.scale(2); await queue.set(0); assert.equal(state.volume, 0);
+  assert.equal((await queue.set(1.01)).ok, false); assert.equal((await queue.set(NaN)).ok, false);
+  await queue.set(.8); await queue.scale(2); assert.equal(state.volume, 1);
+});

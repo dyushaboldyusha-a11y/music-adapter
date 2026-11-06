@@ -63,11 +63,17 @@ public static class LibertyVoiceCatalog {
             }
         }
     }
-    public static string Resolve(string text) { string action; return aliases.TryGetValue(Normalize(text), out action) ? action : ""; }
+    public static bool HasWake(string text) { return Regex.IsMatch(Normalize(text), @"^(?:wave|вейв|вэйв)(?: |$)"); }
+    public static string StripWake(string text) { return Regex.Replace(Normalize(text), @"^(?:wave|вейв|вэйв)(?: |$)", ""); }
+    public static string Resolve(string text) {
+        if (Regex.IsMatch(text ?? "", @"-\s*\d")) return "";
+        text = StripWake(text); string action;
+        return aliases.TryGetValue(text, out action) ? action : LibertyVoiceVolume.Resolve(text);
+    }
     public static string[] Phrases(string language) { return phrases[language].ToArray(); }
     public static bool NegatesCommand(string text) {
-        string phrase = " " + Normalize(text) + " ";
-        return phrase.StartsWith(" не ") || phrase.StartsWith(" пожалуйста не ") ||
+        string phrase = " " + StripWake(text) + " ";
+        return phrase.Contains(" не ") ||
             phrase.Contains(" do not ") || phrase.Contains(" don t ") ||
             (phrase.StartsWith(" not ") && Resolve(phrase.Substring(5)) != "") ||
             (phrase.StartsWith(" please not ") && Resolve(phrase.Substring(12)) != "") || phrase.StartsWith(" never ");
@@ -83,8 +89,13 @@ public static class LibertyVoiceCatalog {
         }
         return 1 - (double)previous[second.Length] / Math.Max(first.Length, second.Length);
     }
-    public static byte[] Grammar(string language) {
-        var words = new List<string>(phrases[language]); words.Add("[unk]");
+    public static byte[] Grammar(string language, bool wake = false) {
+        var words = new List<string>(phrases[language]);
+        if (wake) foreach (string prefix in language == "ru" ? new [] { "вейв", "вэйв", "весь", "вес", "век" } : new [] { "wave", "wait", "wake", "weave", "way" }) {
+            words.Add(prefix);
+            foreach (string phrase in phrases[language]) words.Add(prefix + " " + phrase);
+        }
+        words.Add("[unk]");
         using (var stream = new MemoryStream()) {
             new DataContractJsonSerializer(typeof(string[])).WriteObject(stream, words.ToArray());
             stream.WriteByte(0); return stream.ToArray();

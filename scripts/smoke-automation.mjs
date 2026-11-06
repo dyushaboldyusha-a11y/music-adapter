@@ -19,7 +19,7 @@ async function launch() {
   return { control, widget, action: (name, value) => control.evaluate(({ name, value }) => libertyControl.action(name, value), { name, value }) };
 }
 try {
-  let { control, action } = await launch();
+  let { control, action, widget } = await launch();
   assert.equal(await control.locator('#voice-enabled').isChecked(), false);
   assert.equal(await control.locator('#voice-enabled').isDisabled(), process.platform !== 'win32');
   assert.equal(await control.locator('#voice-microphone').count(), 1);
@@ -35,6 +35,33 @@ try {
   }
   assert.match(await control.locator('#voice-commands').innerText(), /пожалуйста.*please/);
   await control.locator('#voice-commands summary').click();
+  assert.equal(await control.locator('#voice-mode').inputValue(), 'wake');
+  assert.equal((await control.evaluate(() => libertyControl.getState())).shortcuts.bindings.voiceHold, '');
+  await control.locator('#voice-mode').selectOption('hold');
+  await control.waitForFunction(async () => (await libertyControl.getState()).automation.mode === 'hold');
+  await control.locator('#voice-mode').selectOption('wake');
+  await control.waitForFunction(async () => (await libertyControl.getState()).automation.mode === 'wake');
+  assert.equal((await action('voiceMode', 'invalid')).ok, false);
+  await widget.evaluate(() => detachState());
+  const showVoice = voice => widget.evaluate(voice => update({ ...state, voice }), voice);
+  await showVoice({ enabled: true, mode: 'wake', phase: 'waiting' });
+  assert.match(await widget.locator('#voice-indicator').innerText(), /Wave/);
+  for (const phase of ['listening', 'processing']) {
+    await showVoice({ enabled: true, mode: 'wake', phase });
+    assert.equal(await widget.locator('#voice-indicator').getAttribute('data-tone'), phase);
+  }
+  assert.equal((await action('command', { command: 'volume', value: .3 })).ok, true);
+  await widget.evaluate(async () => update(await bridge.getState()));
+  await showVoice({ enabled: true, mode: 'wake', phase: 'recognized', feedback: { text: 'Громкость 30%', heard: 'вейв громкость тридцать процентов', ok: true, until: Date.now() + 4000 } });
+  assert.match(await widget.locator('#voice-indicator').innerText(), /вейв.*→ Громкость 30%/);
+  assert.equal(await widget.locator('#voice-indicator').getAttribute('data-tone'), 'success');
+  const indicatorBounds = await widget.locator('#voice-indicator').evaluate(element => ({ right: element.getBoundingClientRect().right, viewport: innerWidth }));
+  assert.ok(indicatorBounds.right <= indicatorBounds.viewport);
+  await mkdir(join(root, 'artifacts'), { recursive: true });
+  await widget.screenshot({ path: join(root, 'artifacts/voice-wake-indicator.png') });
+  await showVoice({ enabled: false });
+  assert.equal(await widget.locator('#voice-indicator').isVisible(), false);
+  await widget.evaluate(async () => { bridge.onState(update); update(await bridge.getState()); });
   const captureStart = await control.evaluate(() => libertyControl.getState());
   if (process.platform !== 'win32') assert.equal((await action('microphoneTest', true)).ok, false);
   assert.equal((await action('microphone', '../invalid')).ok, false);
@@ -64,12 +91,13 @@ try {
   await app.close(); app = null;
   const file = JSON.parse(await readFile(join(profile, 'widget.json'), 'utf8'));
   assert.equal(file.appProfiles.items[0].preferences.scale, .75); assert.equal(file.scale, 1);
-  assert.equal(file.shortcuts.voiceHold, 'Control+Alt+F7');
+  assert.equal(file.shortcuts.voiceHold, 'Control+Alt+F7'); assert.equal(file.voiceMode, 'wake');
   ({ control, action } = await launch());
   const restored = await control.evaluate(() => libertyControl.getState());
+  assert.equal(restored.automation.mode, 'wake');
   assert.equal(restored.appProfiles.items.length, 1); assert.equal(restored.appProfiles.enabled, false);
   assert.equal(restored.preferences.scale, 1); assert.equal(restored.shortcuts.bindings.voiceHold, 'Control+Alt+F7');
   await control.getByRole('button', { name: 'Удалить профиль Моя игра' }).click();
   await control.waitForFunction(async () => (await libertyControl.getState()).appProfiles.items.length === 0);
-  console.log('PASS: real Electron profile editor, exact EXE normalization, validation rollback, profile/base separation, hold binding, deletion and restart persistence. No microphone opened.');
+  console.log('PASS: real Electron profile editor, exact EXE normalization, validation rollback, profile/base separation, wake mode without binding, voice indicator states, hold binding, deletion and restart persistence. No microphone opened.');
 } finally { await app?.close(); await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }

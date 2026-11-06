@@ -135,3 +135,10 @@ body.has-rhythm-bars .widget { height: 232px; }
 .music-rhythm i { flex: 1; min-width: 0; border-radius: 2px 2px 0 0; background: var(--red); transform: scaleY(0); transform-origin: bottom; }
 body.compact.has-rhythm-bars .widget { height: 100px; }
 body.compact .music-rhythm { left: 13px; right: 13px; bottom: 5px; height: 12px; gap: 3px; }
+
+.voice-indicator { position: fixed; z-index: 8; top: 3px; right: 20px; max-width: calc(100% - 40px); display: flex; gap: 6px; align-items: center; padding: 3px 8px; border-radius: 9px; background: #17171def; color: var(--ink); border: 1px solid #ffffff22; font-size: 10px; line-height: 14px; pointer-events: none; -webkit-app-region: no-drag; }
+#voice-indicator-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.voice-indicator-dot { flex: 0 0 5px; height: 5px; border-radius: 50%; background: var(--muted); }
+.voice-indicator[data-tone="listening"] .voice-indicator-dot, .voice-indicator[data-tone="processing"] .voice-indicator-dot { background: var(--red); }
+.voice-indicator[data-tone="success"] .voice-indicator-dot { background: #74d99f; }
+.voice-indicator[data-tone="error"] .voice-indicator-dot { background: #ff8d82; }

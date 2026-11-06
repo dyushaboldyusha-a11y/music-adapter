@@ -154,3 +154,5 @@ select, input[type="text"] { background: #303034; color: var(--text); border: 1p
 .error { color: #ffabb3 !important; }
 @media(max-width:850px) { .app-layout { grid-template-columns: 68px minmax(0,1fr); } .nav-heading,nav button span,.quit-button span,.connection > span:last-child { display: none; } .sidebar { padding: 25px 8px 12px; } nav button { justify-content: center; padding: 12px; } .connection { justify-content: center; padding: 0 0 15px; } .quit-button { justify-content: center; } main { padding: 27px 26px; } }
 @media(prefers-reduced-motion:reduce) { * { transition: none !important; } }
+
+.voice-mode { width: 100%; padding: 10px; border: 1px solid #ffffff18; border-radius: 8px; color: var(--text); background: #303034; }

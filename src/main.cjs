@@ -11,7 +11,7 @@ const { widgetSize, DEFAULT_PREFERENCES, preferences, layoutForDisplays, snapBou
 const { validatePreferences, exportSettings, importSettings } = require('./customization.cjs');
 const { artworkColor } = require('./artwork-color.cjs');
 const { AppProfiles } = require('./app-profiles.cjs');
-const { WindowsAutomation, heldKeys, VoiceGate, normalizeAutomation } = require('./automation.cjs');
+const { WindowsAutomation, heldKeys, VoiceGate, normalizeAutomation, readVoiceMode } = require('./automation.cjs');
 const VOICE_COMMANDS = require('./shared/voice-commands.json');
 const { AutoHide } = require('./auto-hide.cjs');
 const { watchDisplays } = require('./display-placement.cjs');
@@ -36,14 +36,23 @@ let window, tray, media, saveTimer, placement, browserBridge, shortcuts, updater
 let mediaState = { ...EMPTY_STATE }, audioLevel = { available: false, level: 0 };
 const volumeQueue = new VolumeQueue(() => state, mediaCommand);
 let effectiveScale = 1, profiles, automation, automationState = normalizeAutomation();
-const voiceGate = new VoiceGate(() => state, mediaCommand, volumeQueue);
+let voiceFeedback = null, voiceFeedbackTimer;
+const voiceGate = new VoiceGate(() => state, mediaCommand, volumeQueue, (result, label, heard) => {
+  voiceFeedback = { text: result.ok === false ? result.error || 'Источник не поддерживает эту команду' : label, ok: result.ok !== false, heard, until: Date.now() + 4000 };
+  clearTimeout(voiceFeedbackTimer); voiceFeedbackTimer = setTimeout(() => { voiceFeedback = null; updateVoiceVisibility(); publish(); }, 4000);
+  updateVoiceVisibility(); publish();
+});
+function voiceMode() { return settings.voiceMode === 'hold' ? 'hold' : 'wake'; }
+function voiceConfigured() { return settings.voiceEnabled === true && (voiceMode() === 'wake' || !controlCapture && shortcuts?.snapshot().available.voiceHold === true); }
+function updateVoiceVisibility() {
+  visibility?.update({ ...effectivePreferences(), playing: state.connected && state.playing || settings.voiceEnabled && (!!voiceFeedback || automationState.activated), interaction });
+}
 function effectiveSettings() { return profiles?.effective(settings) || settings; }
 function effectivePreferences() { return preferences(effectiveSettings()); }
 function configureAutomation() {
-  const status = shortcuts?.snapshot();
-  const voice = settings.voiceEnabled === true && !controlCapture && status?.available.voiceHold === true;
+  const voice = voiceConfigured();
   if (!voice) voiceGate.cancel();
-  automation?.configure({ monitor: profiles.enabled, voice, keys: voice ? heldKeys(shortcuts.bindings.voiceHold) : [], microphone: settings.voiceMicrophone || 'default' });
+  if (automation?.configure({ monitor: profiles.enabled, voice, mode: voiceMode(), keys: voice && voiceMode() === 'hold' ? heldKeys(shortcuts.bindings.voiceHold) : [], microphone: settings.voiceMicrophone || 'default', source: state.source?.id || '' })) voiceGate.cancel();
 }
 function profileChanged() { settings.appProfiles = profiles.saved(); save(); restoreLayout(); refreshState(); configureAutomation(); }
 let settings = {}, interaction = true, shortcutCommandPending = false, state = { ...EMPTY_STATE };
@@ -55,7 +64,7 @@ else {
 }
 
 function publish() { if (window && !window.isDestroyed()) window.webContents.send('widget:state', snapshot()); controls?.publish(); }
-function snapshot() { return { ...state, interaction, compact: compactLayout(), audio: audioLevel, autoHidden: visibility?.hidden === true, effectiveColor: effectiveSettings().colorMode === 'artwork' ? artworkAccent || effectiveSettings().color : effectiveSettings().color, shortcuts: shortcuts?.snapshot(), updates: updater?.snapshot(), shortcutAvailable: shortcuts?.snapshot().available.toggleInteraction === true, demo, browserAvailable: browserBridge?.available === true, preferences: { ...effectivePreferences(), scale: effectiveScale }, platform: process.platform }; }
+function snapshot() { return { ...state, interaction, compact: compactLayout(), audio: audioLevel, voice: { ...automationState, enabled: process.platform === 'win32' && settings.voiceEnabled === true, mode: voiceMode(), feedback: voiceFeedback }, autoHidden: visibility?.hidden === true, effectiveColor: effectiveSettings().colorMode === 'artwork' ? artworkAccent || effectiveSettings().color : effectiveSettings().color, shortcuts: shortcuts?.snapshot(), updates: updater?.snapshot(), shortcutAvailable: shortcuts?.snapshot().available.toggleInteraction === true, demo, browserAvailable: browserBridge?.available === true, preferences: { ...effectivePreferences(), scale: effectiveScale }, platform: process.platform }; }
 function compactLayout() { return effectiveSettings().compact === true; }
 function boundsKey() { return compactLayout() ? 'compactBounds' : 'bounds'; }
 function rememberBounds(bounds) { profiles.setBounds(boundsKey(), bounds, settings); settings.appProfiles = profiles.saved(); }
@@ -69,13 +78,13 @@ function refreshState() {
     try { if (cachedArtwork) { const image = nativeImage.createFromDataURL(cachedArtwork).resize({ width: 40, height: 40 }); if (!image.isEmpty()) artworkAccent = artworkColor(image.toBitmap(), null); } } catch {}
   }
   audio?.configure({ target: native && state.connected ? state.source.appId : '', enabled: !!native && state.connected && state.playing && effectiveSettings().waveIntensity > 0 && (effectiveSettings().waveMode === 'audio' || effectiveSettings().coverPulse || effectiveSettings().rhythmBars || effectiveSettings().beatGlow), economy: effectiveSettings().waveEconomy === true });
-  visibility?.update({ ...effectivePreferences(), playing: state.connected && state.playing, interaction });
+  updateVoiceVisibility();
   publish();
 }
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch (error) { console.error('Cannot save preferences', error.message); } }, 250); }
 function setInteraction(enabled, restore = true) {
   interaction = enabled;
-  visibility?.update({ ...effectivePreferences(), playing: state.connected && state.playing, interaction });
+  updateVoiceVisibility();
   window.setIgnoreMouseEvents(!enabled);
   window.setFocusable(enabled);
   if (enabled) { if (restore) placement?.restore(); window.show(); window.focus(); }
@@ -128,7 +137,7 @@ async function openMusic(provider = state.source?.provider || 'yandex', nativeAp
   catch { return { ok: false, error: 'Откройте плеер самостоятельно' }; }
 }
 function controlSnapshot() {
-  return { ...snapshot(), preferences: effectivePreferences(), displays: screen.getAllDisplays().map((d, index) => ({ id: String(d.id), name: d.label || `Монитор ${index + 1}`, width: d.workArea.width, height: d.workArea.height })), effectiveScale, version: app.getVersion(), pairedBrowsers: browserBridge?.clients.size || 0, pairing: browserBridge?.pairing || null, controlCapture, voiceCommands: VOICE_COMMANDS.commands, positions: Object.fromEntries(['bounds', 'compactBounds'].filter(key => effectiveSettings()[key]).map(key => [key, effectiveSettings()[key]])), appProfiles: profiles.snapshot(), automation: { ...automationState, supported: process.platform === 'win32', enabled: settings.voiceEnabled === true, microphone: settings.voiceMicrophone || 'default' } };
+  return { ...snapshot(), preferences: effectivePreferences(), displays: screen.getAllDisplays().map((d, index) => ({ id: String(d.id), name: d.label || `Монитор ${index + 1}`, width: d.workArea.width, height: d.workArea.height })), effectiveScale, version: app.getVersion(), pairedBrowsers: browserBridge?.clients.size || 0, pairing: browserBridge?.pairing || null, controlCapture, voiceCommands: VOICE_COMMANDS.commands, positions: Object.fromEntries(['bounds', 'compactBounds'].filter(key => effectiveSettings()[key]).map(key => [key, effectiveSettings()[key]])), appProfiles: profiles.snapshot(), automation: { ...automationState, supported: process.platform === 'win32', enabled: settings.voiceEnabled === true, mode: voiceMode(), feedback: voiceFeedback, microphone: settings.voiceMicrophone || 'default' } };
 }
 async function openControls(page = 'home') {
   if (!['home', 'sources', 'appearance', 'shortcuts', 'updates'].includes(page)) return { ok: false, error: 'Неизвестный раздел' };
@@ -157,7 +166,10 @@ async function controlAction(action, value) {
     case 'profiles': profiles.configure(value); profileChanged(); return { ok: true };
     case 'voice':
       if (typeof value !== 'boolean') throw new Error('Некорректный режим голоса');
-      settings.voiceEnabled = value; configureAutomation(); save(); publish(); return { ok: true };
+      settings.voiceEnabled = value; voiceFeedback = null; configureAutomation(); save(); publish(); return { ok: true };
+    case 'voiceMode':
+      if (!['wake', 'hold'].includes(value)) throw new Error('Выберите режим голоса');
+      settings.voiceMode = value; voiceFeedback = null; voiceGate.cancel(); configureAutomation(); save(); publish(); return { ok: true };
     case 'microphone':
       if (typeof value !== 'string' || !automationState.microphones.some(microphone => microphone.id === value)) throw new Error('Выберите доступный микрофон');
       settings.voiceMicrophone = value; voiceGate.cancel(); configureAutomation(); save(); publish(); return { ok: true };
@@ -166,7 +178,7 @@ async function controlAction(action, value) {
       await automation.refreshMicrophones(); return { ok: true };
     case 'microphoneTest':
       if (!automation || typeof value !== 'boolean') throw new Error('Проверка микрофона доступна в Windows');
-      voiceGate.cancel(); await automation.testMicrophone(value); return { ok: true };
+      voiceFeedback = null; voiceGate.cancel(); await automation.testMicrophone(value); return { ok: true };
     case 'preferences': setPreferences(value); return { ok: true };
     case 'command': return mediaCommand(value?.command, value?.value);
     case 'source': return selectSource(value);
@@ -196,6 +208,7 @@ function trayImage() {
 }
 async function start() {
   try { const saved = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'widget.json'), 'utf8')); if (saved && typeof saved === 'object') settings = saved; } catch {}
+  settings.voiceMode = readVoiceMode(settings);
   Object.assign(settings, preferences(settings));
   profiles = new AppProfiles(settings.appProfiles);
   shortcuts = new ShortcutManager(globalShortcut, { toggleInteraction: () => setInteraction(!interaction), ...Object.fromEntries(['playPause', 'next', 'previous'].map(command => [command, () => shortcutMediaCommand(command)])), volumeUp: () => volumeQueue.step(.05), volumeDown: () => volumeQueue.step(-.05), mute: () => volumeQueue.mute(), toggleCompact: () => setPreferences({ compact: !effectiveSettings().compact }), voiceHold: () => {} }, settings.shortcuts);
@@ -257,18 +270,24 @@ async function start() {
     audio.on('level', value => { if (state.source?.kind === 'app' && state.source?.appId === value.target) sendAudioLevel(value); });
     audio.start();
   }
-  media.on('state', value => { const changed = JSON.stringify([value.connected, value.selection, value.sources?.map(s => [s.id,s.title])]) !== JSON.stringify([state.connected, state.selection, state.sources?.map(s => [s.id,s.title])]); if (value.source?.id !== state.source?.id) voiceGate.cancel(); if (value.source?.id !== state.source?.id || !value.playing) sendAudioLevel({ available: false, level: 0 }); mediaState = value; refreshState(); if (changed) updateTray(); });
+  media.on('state', value => { const sourceChanged = value.source?.id !== state.source?.id; const changed = JSON.stringify([value.connected, value.selection, value.sources?.map(s => [s.id,s.title])]) !== JSON.stringify([state.connected, state.selection, state.sources?.map(s => [s.id,s.title])]); if (value.source?.id !== state.source?.id) { voiceGate.cancel(); voiceFeedback = null; } if (value.source?.id !== state.source?.id || !value.playing) sendAudioLevel({ available: false, level: 0 }); mediaState = value; refreshState(); if (sourceChanged) configureAutomation(); if (changed) updateTray(); });
   browserBridge.on('level', value => { if (value.sourceId === state.source?.id) sendAudioLevel(value); });
   browserBridge.on('change', () => controls.publish());
   media.start();
   if (process.platform === 'win32') {
     automation = new WindowsAutomation(app.isPackaged ? path.join(process.resourcesPath, 'native/windows-automation.ps1') : path.join(__dirname, '../native/windows-automation.ps1'));
     automation.on('state', value => {
+      const previousStatus = JSON.stringify([automationState.session, automationState.phase, automationState.heard, automationState.error, automationState.activated, automationState.test]);
+      const previousSession = automationState.session;
       automationState = normalizeAutomation(value);
+      if (automationState.session !== previousSession && automationState.phase === 'listening') { voiceFeedback = null; clearTimeout(voiceFeedbackTimer); }
       if (profiles.observe(automationState.foreground, path.basename(process.execPath))) { restoreLayout(); refreshState(); }
-      if (settings.voiceEnabled && !controlCapture && shortcuts.snapshot().available.voiceHold) voiceGate.accept(automationState).catch(console.error);
+      if (voiceConfigured() && automationState.configuration === automation.revision && automationState.mode === voiceMode()) voiceGate.accept(automationState).catch(console.error);
       else voiceGate.cancel();
-      publish();
+      updateVoiceVisibility();
+      // Meter frames should not resend large artwork to the widget each time.
+      const currentStatus = JSON.stringify([automationState.session, automationState.phase, automationState.heard, automationState.error, automationState.activated, automationState.test]);
+      if (currentStatus !== previousStatus) publish(); else controls?.publish();
     });
     configureAutomation();
   }
@@ -276,5 +295,5 @@ async function start() {
   if (!demo && !process.argv.includes('--widget-only')) await openControls();
 }
 function sendAudioLevel(value) { audioLevel = state.playing ? value : { available: false, level: 0 }; if (window && !window.isDestroyed()) window.webContents.send('widget:audio-level', audioLevel); }
-app.on('before-quit', () => { controls?.dispose(); updater?.stop(); placement?.dispose(); visibility?.dispose(); clearTimeout(fadeTimer); clearTimeout(snapTimer); clearTimeout(saveTimer); if (window && !window.isDestroyed()) { rememberBounds(window.getBounds()); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } automation?.stop(); voiceGate.cancel(); audio?.stop(); media?.stop(); browserBridge?.stop(); shortcuts?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
+app.on('before-quit', () => { controls?.dispose(); updater?.stop(); placement?.dispose(); visibility?.dispose(); clearTimeout(fadeTimer); clearTimeout(snapTimer); clearTimeout(saveTimer); clearTimeout(voiceFeedbackTimer); if (window && !window.isDestroyed()) { rememberBounds(window.getBounds()); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } automation?.stop(); voiceGate.cancel(); audio?.stop(); media?.stop(); browserBridge?.stop(); shortcuts?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
 app.on('window-all-closed', () => app.quit());

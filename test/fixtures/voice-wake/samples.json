@@ -1,0 +1,260 @@
+[
+  {
+    "file": "ru-next.wav",
+    "text": "Вейв, следующий трек.",
+    "command": "next",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-pause.wav",
+    "text": "Вейв, пауза.",
+    "command": "pause",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-volume30.wav",
+    "text": "Вейв, громкость тридцать процентов.",
+    "command": "volumeSet:30",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-volume0.wav",
+    "text": "Вейв, громкость ноль процентов.",
+    "command": "volumeSet:0",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-volume100.wav",
+    "text": "Вейв, громкость сто процентов.",
+    "command": "volumeSet:100",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-plus.wav",
+    "text": "Вейв, прибавь десять.",
+    "command": "volumeStep:10",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-minus.wav",
+    "text": "Вейв, убавь десять процентов.",
+    "command": "volumeStep:-10",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-half.wav",
+    "text": "Вейв, убавь вдвое.",
+    "command": "volumeScale:0.5",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-double.wav",
+    "text": "Вейв, сделай вдвое громче.",
+    "command": "volumeScale:2",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-bare-next.wav",
+    "text": "Следующий трек.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-bare-volume.wav",
+    "text": "Громкость тридцать процентов.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-hold-volume.wav",
+    "text": "Громкость тридцать процентов.",
+    "command": "volumeSet:30",
+    "mode": "hold"
+  },
+  {
+    "file": "ru-negation.wav",
+    "text": "Вейв, не переключай музыку.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-outside.wav",
+    "text": "Вейв, громкость сто один процент.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-weather.wav",
+    "text": "Сегодня хорошая погода.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-middle.wav",
+    "text": "Кто то сказал вейв, следующий трек.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-wake-only.wav",
+    "text": "Вейв.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-similar.wav",
+    "text": "Весь следующий трек.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-similar-volume.wav",
+    "text": "Вес, громкость тридцать процентов.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-negative-volume.wav",
+    "text": "Вейв, громкость минус пять процентов.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-missing-number.wav",
+    "text": "Вейв, громкость процентов.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "ru-volume-only.wav",
+    "text": "Вейв, громкость.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "en-next.wav",
+    "text": "Wave, next.",
+    "command": "next",
+    "mode": "wake"
+  },
+  {
+    "file": "en-volume50.wav",
+    "text": "Wave, volume fifty percent.",
+    "command": "volumeSet:50",
+    "mode": "wake"
+  },
+  {
+    "file": "en-volume35.wav",
+    "text": "Wave, set volume to thirty five percent.",
+    "command": "volumeSet:35",
+    "mode": "wake"
+  },
+  {
+    "file": "en-minus.wav",
+    "text": "Wave, lower volume by ten percent.",
+    "command": "volumeStep:-10",
+    "mode": "wake"
+  },
+  {
+    "file": "en-half.wav",
+    "text": "Wave, halve volume.",
+    "command": "volumeScale:0.5",
+    "mode": "wake"
+  },
+  {
+    "file": "en-mute.wav",
+    "text": "Wave, mute.",
+    "command": "mute",
+    "mode": "wake"
+  },
+  {
+    "file": "en-bare-next.wav",
+    "text": "Next track.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "en-bare-volume.wav",
+    "text": "Volume fifty percent.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "en-hold-volume.wav",
+    "text": "Volume fifty percent.",
+    "command": "volumeSet:50",
+    "mode": "hold"
+  },
+  {
+    "file": "en-negation.wav",
+    "text": "Wave, do not skip.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "en-outside.wav",
+    "text": "Wave, volume one hundred and one percent.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "en-middle.wav",
+    "text": "They said wave next.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "en-wait.wav",
+    "text": "Wait, next.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "en-wait-volume.wav",
+    "text": "Wait, volume fifty percent.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "en-wake.wav",
+    "text": "Wake, next.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "en-weave.wav",
+    "text": "Weave, mute.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "en-negative-volume.wav",
+    "text": "Wave, volume minus five percent.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "en-missing-number.wav",
+    "text": "Wave, volume percent.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "en-volume-only.wav",
+    "text": "Wave, volume.",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "silence.wav",
+    "text": "",
+    "command": "none",
+    "mode": "wake"
+  },
+  {
+    "file": "noise.wav",
+    "text": "",
+    "command": "none",
+    "mode": "wake"
+  }
+]
