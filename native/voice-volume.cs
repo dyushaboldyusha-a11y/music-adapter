@@ -64,7 +64,7 @@ public static class LibertyVoiceVolume {
             // A number decoder may recover a word omitted by the unrestricted
             // LM. Never do this for malformed/out-of-range numeric sequences.
             foreach (string word in LibertyVoiceCatalog.Normalize(transcript).Split(' ')) if (NumberWord(word)) return false;
-            return numberConfidence >= .95f && VolumeCue(transcript) && LibertyVoiceCatalog.Similarity(LibertyVoiceCatalog.StripWake(transcript), LibertyVoiceCatalog.StripWake(candidate)) >= .65;
+            return numberConfidence >= .75f && VolumeCue(transcript) && LibertyVoiceCatalog.Similarity(LibertyVoiceCatalog.StripWake(transcript), LibertyVoiceCatalog.StripWake(candidate)) >= .65;
         }
         var fullContext = Context(transcript); var candidateContext = Context(candidate);
         return number >= 0 && Int32.TryParse(parts[1], out proposed) && Math.Abs(proposed) == number && fullContext.Length == candidateContext.Length && LibertyVoiceCatalog.Similarity(String.Join(" ", fullContext), String.Join(" ", candidateContext)) >= .6;
