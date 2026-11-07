@@ -25,7 +25,7 @@ async function localDiscord(t, { error = false, ready = true } = {}) {
     });
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(name, resolve); });
-  const presence = new DiscordPresence({ connect: () => net.createConnection(name), fetch: async () => { throw new Error('Unexpected cover lookup'); }, throttleMs: 40, retryMs: 25, timeoutMs: 200 });
+  const presence = new DiscordPresence({ connect: () => net.createConnection(name), fetch: async () => { throw new Error('Unexpected cover lookup'); }, throttleMs: 40, emptyGraceMs: 80, retryMs: 25, timeoutMs: 200 });
   t.after(async () => { presence.stop(); for (const socket of sockets) socket.destroy(); await new Promise(resolve => server.close(resolve)); });
   return { presence, packets, sockets, activities: () => packets.filter(p => p.data.cmd === 'SET_ACTIVITY') };
 }
@@ -104,4 +104,18 @@ test('native cover lookup accepts only exact metadata, caches results and stays 
     presence.update(track({ artworkUrl: '', position: 32 })); assert.equal(lookups, 1);
     presence.configure({ enabled: false, applicationId: id }); presence.update(track({ title: 'Другое', artworkUrl: '' })); assert.equal(lookups, 1);
   } finally { presence.stop(); }
+});
+
+test('a transient empty session between songs does not clear Discord presence', async t => {
+  const { presence, activities } = await localDiscord(t);
+  presence.update(track()); presence.configure({ enabled: true });
+  await wait(() => presence.lastSent);
+  presence.update(track({ connected: false, title: '' }));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(activities().some(p => p.data.args.activity === null), false);
+  presence.update(track({ title: 'Следующий трек' }));
+  await wait(() => presence.lastSent?.details === 'Следующий трек');
+  assert.equal(activities().some(p => p.data.args.activity === null), false);
+  presence.update(track({ connected: false }));
+  await wait(() => activities().some(p => p.data.args.activity === null));
 });

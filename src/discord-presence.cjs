@@ -34,8 +34,8 @@ const trackKey = state => JSON.stringify([state?.source?.id, state?.title, state
 const canonical = value => String(value || '').normalize('NFKC').toLocaleLowerCase('en-US').replace(/[^\p{L}\p{N}]/gu, '');
 
 class DiscordPresence extends EventEmitter {
-  constructor({ connect = name => net.createConnection(name), fetch = globalThis.fetch, retryMs = 15000, throttleMs = 15000, timeoutMs = 3000, now = () => Date.now() } = {}) {
-    super(); this.connect = connect; this.fetch = fetch; this.retryMs = retryMs; this.throttleMs = throttleMs; this.timeoutMs = timeoutMs; this.now = now;
+  constructor({ connect = name => net.createConnection(name), fetch = globalThis.fetch, retryMs = 15000, throttleMs = 15000, timeoutMs = 3000, emptyGraceMs = 2500, now = () => Date.now() } = {}) {
+    super(); this.connect = connect; this.fetch = fetch; this.retryMs = retryMs; this.throttleMs = throttleMs; this.timeoutMs = timeoutMs; this.now = now; this.emptyGraceMs = emptyGraceMs; this.emptySince = null;
     this.enabled = false; this.applicationId = DEFAULT_DISCORD_APPLICATION_ID; this.phase = 'off'; this.error = ''; this.epoch = 0; this.state = null; this.clock = new PlaybackClock(); this.covers = new Map(); this.cover = null; this.coverKey = ''; this.lastSentAt = -Infinity;
   }
   snapshot() { return { enabled: this.enabled, applicationId: this.applicationId, phase: this.phase, error: this.error }; }
@@ -48,7 +48,7 @@ class DiscordPresence extends EventEmitter {
     if (!id) { this.status('missing-id'); return; }
     this.resolveCover(); this.open(0, this.epoch);
   }
-  update(state) { this.state = state; this.clock.update(state); if (this.enabled && this.applicationId) { this.resolveCover(); this.flush(); } }
+  update(state) { if (state?.connected && state.title?.trim()) this.emptySince = null; this.state = state; this.clock.update(state); if (this.enabled && this.applicationId) { this.resolveCover(); this.flush(); } }
   async resolveCover() {
     const state = this.state, key = trackKey(state);
     if (key === this.coverKey) return;
@@ -126,6 +126,13 @@ class DiscordPresence extends EventEmitter {
   flush() {
     if (!this.enabled || !this.ready || !this.socket || this.pending) return;
     const activity = activityFor(this.state, { now: this.now(), position: this.clock.position(), cover: this.cover });
+    // Players briefly publish an empty session between tracks. Keep the last
+    // activity until metadata returns, but still clear a genuinely closed player.
+    if (activity === null && this.lastSent) {
+      if (this.emptySince === null) this.emptySince = this.now();
+      const remaining = this.emptyGraceMs - (this.now() - this.emptySince);
+      if (remaining > 0) { clearTimeout(this.flushTimer); this.flushTimer = setTimeout(() => this.flush(), remaining); this.flushTimer.unref?.(); return; }
+    }
     const equal = (a, b) => {
       if (JSON.stringify({ ...a, timestamps: undefined }) !== JSON.stringify({ ...b, timestamps: undefined })) return false;
       return !!a?.timestamps === !!b?.timestamps && (!a?.timestamps || Math.abs(a.timestamps.start - b.timestamps.start) < 2000 && Math.abs(a.timestamps.end - b.timestamps.end) < 2000);
@@ -139,7 +146,7 @@ class DiscordPresence extends EventEmitter {
     this.ackTimer = setTimeout(() => { this.socket?.destroy(); }, this.timeoutMs); this.ackTimer.unref?.();
   }
   disconnect() {
-    this.epoch++; clearTimeout(this.retry); clearTimeout(this.connectionTimer); clearTimeout(this.ackTimer); clearTimeout(this.flushTimer); this.coverRequest?.abort(); this.coverKey = '';
+    this.epoch++; clearTimeout(this.retry); clearTimeout(this.connectionTimer); clearTimeout(this.ackTimer); clearTimeout(this.flushTimer); this.coverRequest?.abort(); this.coverKey = ''; this.emptySince = null;
     const socket = this.socket;
     if (socket && this.ready && !socket.destroyed) socket.end(frame(1, { cmd: 'SET_ACTIVITY', args: { pid: process.pid, activity: null }, nonce: randomUUID() }));
     else socket?.destroy();
