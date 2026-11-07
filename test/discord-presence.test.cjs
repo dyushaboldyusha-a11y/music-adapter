@@ -4,7 +4,7 @@ const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { DiscordPresence, activityFor, clientId, frame, ipcPath } = require('../src/discord-presence.cjs');
+const { DiscordPresence, DEFAULT_DISCORD_APPLICATION_ID, activityFor, clientId, frame, ipcPath } = require('../src/discord-presence.cjs');
 const { normalizeState, validateCommand } = require('../src/media.cjs');
 const id = '1234567890123456789';
 const cover = 'https://i.scdn.co/image/example';
@@ -56,9 +56,9 @@ test('disabled and missing-ID integration never connects or requests covers', ()
 });
 test('real local RPC handles fragmented READY, ping, seek, pause, source loss and disabling', async t => {
   const { presence, activities, packets, sockets } = await localDiscord(t);
-  presence.update(track()); presence.configure({ enabled: true, applicationId: id });
+  presence.update(track()); presence.configure({ enabled: true });
   await wait(() => activities().length === 1 && presence.lastSent);
-  assert.deepEqual(packets[0].data, { v: 1, client_id: id }); assert.equal(activities()[0].data.args.activity.details, 'Трек');
+  assert.deepEqual(packets[0].data, { v: 1, client_id: DEFAULT_DISCORD_APPLICATION_ID }); assert.equal(activities()[0].data.args.activity.details, 'Трек');
   sockets[0].write(frame(3, { ping: 1 })); await wait(() => packets.some(p => p.opcode === 4));
   presence.update(track({ position: 90 })); await wait(() => activities().length === 2);
   assert.ok(activities()[1].data.args.activity.timestamps.start < activities()[0].data.args.activity.timestamps.start - 59000);

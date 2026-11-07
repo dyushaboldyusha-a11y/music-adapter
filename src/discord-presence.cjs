@@ -5,6 +5,7 @@ const os = require('node:os');
 const { randomUUID } = require('node:crypto');
 const { PlaybackClock } = require('./renderer/playback-clock.js');
 const { artworkUrl } = require('./artwork-url.cjs');
+const DEFAULT_DISCORD_APPLICATION_ID = '1568620348604162058';
 
 const text = (value, length = 128) => Array.from(String(value || '').replace(/[\p{C}]/gu, ' ').trim()).slice(0, length).join('');
 function clientId(value) {
@@ -35,11 +36,11 @@ const canonical = value => String(value || '').normalize('NFKC').toLocaleLowerCa
 class DiscordPresence extends EventEmitter {
   constructor({ connect = name => net.createConnection(name), fetch = globalThis.fetch, retryMs = 15000, throttleMs = 15000, timeoutMs = 3000, now = () => Date.now() } = {}) {
     super(); this.connect = connect; this.fetch = fetch; this.retryMs = retryMs; this.throttleMs = throttleMs; this.timeoutMs = timeoutMs; this.now = now;
-    this.enabled = false; this.applicationId = ''; this.phase = 'off'; this.error = ''; this.epoch = 0; this.state = null; this.clock = new PlaybackClock(); this.covers = new Map(); this.cover = null; this.coverKey = ''; this.lastSentAt = -Infinity;
+    this.enabled = false; this.applicationId = DEFAULT_DISCORD_APPLICATION_ID; this.phase = 'off'; this.error = ''; this.epoch = 0; this.state = null; this.clock = new PlaybackClock(); this.covers = new Map(); this.cover = null; this.coverKey = ''; this.lastSentAt = -Infinity;
   }
   snapshot() { return { enabled: this.enabled, applicationId: this.applicationId, phase: this.phase, error: this.error }; }
   status(phase, error = '') { if (this.phase === phase && this.error === error) return; this.phase = phase; this.error = error; this.emit('state', this.snapshot()); }
-  configure({ enabled = false, applicationId = '' } = {}) {
+  configure({ enabled = false, applicationId = DEFAULT_DISCORD_APPLICATION_ID } = {}) {
     let id = ''; try { id = clientId(applicationId); } catch {}
     if (this.enabled === enabled && this.applicationId === id) return;
     this.disconnect(); this.enabled = enabled === true; this.applicationId = id;
@@ -148,4 +149,4 @@ class DiscordPresence extends EventEmitter {
   }
   stop() { const closed = this.disconnect(); this.enabled = false; this.status('off'); return closed; }
 }
-module.exports = { DiscordPresence, activityFor, clientId, frame, ipcPath };
+module.exports = { DiscordPresence, DEFAULT_DISCORD_APPLICATION_ID, activityFor, clientId, frame, ipcPath };

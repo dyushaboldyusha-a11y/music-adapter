@@ -8,7 +8,7 @@ const { createUpdateFetch } = require('./update-fetch.cjs');
 const { WindowsMedia, DemoMedia, EMPTY_STATE, validateCommand } = require('./media.cjs');
 const { WindowsAudio, VolumeQueue } = require('./audio.cjs');
 const { PlaybackFade } = require('../browser-extension/playback-fade.js');
-const { DiscordPresence, clientId: discordClientId } = require('./discord-presence.cjs');
+const { DiscordPresence, DEFAULT_DISCORD_APPLICATION_ID, clientId: discordClientId } = require('./discord-presence.cjs');
 const { widgetSize, DEFAULT_PREFERENCES, preferences, layoutForDisplays, snapBounds } = require('./window-state.cjs');
 const { validatePreferences, exportSettings, importSettings } = require('./customization.cjs');
 const { artworkColor } = require('./artwork-color.cjs');
@@ -161,12 +161,13 @@ function endControlCapture() {
 }
 async function controlAction(action, value) {
   switch (action) {
-    case 'discord':
-      if (!value || typeof value.enabled !== 'boolean' || typeof value.applicationId !== 'string') throw new Error('Некорректные настройки Discord');
-      if (value.applicationId) discordClientId(value.applicationId);
-      if (value.enabled && !value.applicationId) throw new Error('Сначала укажите Application ID приложения Discord');
-      settings.discordEnabled = value.enabled; settings.discordApplicationId = value.applicationId;
-      discord.configure(value); save(); publish(); return { ok: true };
+    case 'discord': {
+      if (!value || typeof value.enabled !== 'boolean' || value.applicationId !== undefined && typeof value.applicationId !== 'string') throw new Error('Некорректные настройки Discord');
+      const applicationId = value.applicationId === undefined ? discord.snapshot().applicationId : value.applicationId.trim() || DEFAULT_DISCORD_APPLICATION_ID;
+      discordClientId(applicationId);
+      settings.discordEnabled = value.enabled; settings.discordApplicationId = applicationId;
+      discord.configure({ enabled: value.enabled, applicationId }); save(); publish(); return { ok: true };
+    }
     case 'discordPortal': await shell.openExternal('https://discord.com/developers/applications'); return { ok: true };
     case 'export': {
       const result = await dialog.showSaveDialog(controls.window, { title: 'Экспорт настроек Liberty Wave', defaultPath: 'Liberty-Wave-settings.json', filters: [{ name: 'Настройки JSON', extensions: ['json'] }] });
@@ -245,7 +246,7 @@ async function start() {
   updater.on('state', publish);
   discord = new DiscordPresence({ fetch: (url, options) => net.fetch(url, { ...options, credentials: 'omit' }) });
   discord.on('state', () => controls?.publish());
-  discord.configure({ enabled: settings.discordEnabled === true, applicationId: settings.discordApplicationId || '' });
+  discord.configure({ enabled: settings.discordEnabled === true, applicationId: settings.discordApplicationId || DEFAULT_DISCORD_APPLICATION_ID });
   controls = new ControlWindow({ BrowserWindow, ipcMain, screen, icon: nativeImage.createFromPath(ICON_PATH), getState: controlSnapshot, action: controlAction, getBounds: () => settings.controlBounds, saveBounds: value => { settings.controlBounds = value; save(); }, onBlur: endControlCapture });
   const initial = layoutForDisplays(effectiveSettings()[boundsKey()], screen.getAllDisplays(), effectiveSettings().scale, widgetSize(effectiveSettings()), effectivePreferences());
   effectiveScale = initial.scale;

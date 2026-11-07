@@ -61,8 +61,11 @@
         <div class="card personal-card" id="discord-card">
           <label class="setting-row"><span><strong>Показывать музыку в Discord</strong><small>Название, исполнитель, обложка и прогресс выбранного трека</small></span><input id="discord-enabled" class="switch" type="checkbox"></label>
           <p class="footnote" id="discord-status" role="status" aria-live="polite"></p>
-          <form id="discord-form"><label for="discord-id">Application ID приложения Liberty Wave в Discord</label><div class="microphone-controls"><input id="discord-id" type="text" inputmode="numeric" pattern="[1-9][0-9]{16,19}" maxlength="20" autocomplete="off" spellcheck="false" placeholder="Публичный числовой ID"><button type="submit">Сохранить ID</button><button type="button" id="discord-portal">Открыть Developer Portal</button></div></form>
-          <p class="footnote">Один раз создайте приложение с именем Liberty Wave в Developer Portal и скопируйте Application ID из General Information. Токен не нужен. Требуются запущенный настольный Discord и разрешённый показ активности в его настройках. Для обложек из Windows название и исполнитель ищутся в Apple Music; звук и микрофон не передаются.</p>
+          <p class="footnote">Подключение Liberty Wave уже настроено. Запустите настольный Discord и разрешите показ активности в его настройках. Для обложек из Windows название и исполнитель ищутся в Apple Music; звук и микрофон не передаются.</p>
+          <details id="discord-advanced" class="voice-command-list"><summary>Другое приложение Discord</summary>
+            <form id="discord-form"><label for="discord-id">Application ID своего приложения (необязательно)</label><div class="microphone-controls"><input id="discord-id" type="text" inputmode="numeric" pattern="[1-9][0-9]{16,19}" maxlength="20" autocomplete="off" spellcheck="false" placeholder="Оставьте пустым для Liberty Wave"><button type="submit">Сохранить ID</button><button type="button" id="discord-portal">Открыть Developer Portal</button></div></form>
+            <p class="footnote">Для обычного подключения менять ID не нужно. Пустое поле вернёт общее приложение Liberty Wave. Токен и Client Secret не требуются.</p>
+          </details>
         </div>
         <h3 class="section-title">Источник музыки</h3>
         <div class="card source-choice"><label for="home-source">Выбранный плеер</label><select id="home-source" aria-label="Источник музыки"></select><button class="text-button" data-go="sources">Подключить другой источник <span>→</span></button></div>

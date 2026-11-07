@@ -6,8 +6,8 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import assert from 'node:assert/strict';
 const require = createRequire(import.meta.url), root = resolve(import.meta.dirname, '..');
-const { frame } = require('../src/discord-presence.cjs');
-const profile = await mkdtemp(join(tmpdir(), 'wave-playback-')), packets = [], sockets = [];
+const { frame, DEFAULT_DISCORD_APPLICATION_ID } = require('../src/discord-presence.cjs');
+const profile = await mkdtemp(join(tmpdir(), 'wave-playback-')), packets = [], handshakes = [], sockets = [];
 let app, server;
 const wait = async predicate => { const until = Date.now() + 10000; while (!await predicate()) { if (Date.now() > until) throw new Error('Playback GUI test timed out'); await new Promise(r => setTimeout(r, 25)); } };
 async function launch() {
@@ -33,7 +33,7 @@ try {
       buffer = Buffer.concat([buffer, chunk]);
       while (buffer.length >= 8 && buffer.length >= 8 + buffer.readUInt32LE(4)) {
         const op = buffer.readUInt32LE(0), size = buffer.readUInt32LE(4), data = JSON.parse(buffer.subarray(8, size + 8)); buffer = buffer.subarray(size + 8);
-        if (op === 0) socket.write(frame(1, { evt: 'READY' }));
+        if (op === 0) { handshakes.push(data); socket.write(frame(1, { evt: 'READY' })); }
         if (op === 1) { packets.push(data); socket.write(frame(1, { nonce: data.nonce, cmd: data.cmd, data: {} })); }
       }
     });
@@ -43,7 +43,8 @@ try {
   const action = (name, value) => control.evaluate(({ name, value }) => libertyControl.action(name, value), { name, value });
   assert.equal(await control.locator('#smooth-playback').isChecked(), true);
   assert.equal(await control.locator('#discord-enabled').isChecked(), false);
-  assert.equal((await action('discord', { enabled: true, applicationId: '' })).ok, false);
+  assert.equal((await control.evaluate(() => libertyControl.getState())).discord.applicationId, DEFAULT_DISCORD_APPLICATION_ID);
+  assert.equal(await control.locator('#discord-advanced').getAttribute('open'), null);
   assert.equal((await action('discord', { enabled: true, applicationId: 'bad' })).ok, false);
   await widget.evaluate(() => { window.fadeSamples = []; musicWidget.onState(s => fadeSamples.push({ volume: s.volume, playing: s.playing })); });
   await widget.locator('#play-pause').click();
@@ -65,18 +66,21 @@ try {
   await wait(async () => (await widget.evaluate(() => musicWidget.getState())).volume < .65);
   assert.equal((await action('source', 'demo:spotify')).ok, true);
   await wait(async () => { const s = await widget.evaluate(() => musicWidget.getState()); return s.source.id === 'demo:spotify' && s.volume === .65; });
+  await control.locator('#discord-enabled').check();
+  await wait(() => packets.some(p => p.args.activity?.details === 'After Dark'));
+  assert.equal(handshakes[0].client_id, '1568620348604162058', 'A fresh profile must connect using the shared Liberty Wave ID without manual setup');
+  await control.waitForFunction(() => document.getElementById('discord-status').textContent.includes('Подключено'));
+  await control.locator('#discord-advanced summary').click();
   await control.locator('#discord-id').fill('1234567890123456789');
   await control.locator('#discord-form button[type="submit"]').click();
   await wait(async () => (await control.evaluate(() => libertyControl.getState())).discord.applicationId === '1234567890123456789');
-  await control.locator('#discord-enabled').check();
-  await wait(() => packets.some(p => p.args.activity?.details === 'After Dark'));
-  await control.waitForFunction(() => document.getElementById('discord-status').textContent.includes('Подключено'));
   await control.locator('#discord-id').fill('1234567890123456790');
   await control.waitForTimeout(1100); assert.equal(await control.locator('#discord-id').inputValue(), '1234567890123456790', 'Heartbeat must preserve an unsaved ID');
   await control.locator('#discord-id').fill('1234567890123456789');
   await control.locator('#discord-form button[type="submit"]').click();
   const clearBefore = packets.filter(p => p.args.activity === null).length;
   await control.locator('#discord-enabled').uncheck(); await wait(() => packets.filter(p => p.args.activity === null).length > clearBefore);
+  await control.locator('#discord-advanced summary').click();
   await control.locator('#discord-card').scrollIntoViewIfNeeded();
   await mkdir(join(root, 'artifacts'), { recursive: true }); await control.screenshot({ path: join(root, 'artifacts/playback-discord-settings.png') });
   await app.close(); app = null;
@@ -84,7 +88,17 @@ try {
   assert.equal(saved.smoothPlayback, true); assert.equal(saved.discordEnabled, false); assert.equal(saved.discordApplicationId, '1234567890123456789');
   ({ control, widget } = await launch());
   assert.equal(await control.locator('#smooth-playback').isChecked(), true); assert.equal(await control.locator('#discord-id').inputValue(), '1234567890123456789'); assert.equal(await control.locator('#discord-enabled').isChecked(), false);
-  console.log('PASS: real Electron fades and saved volume, disabled fade, source-switch cancellation, Discord settings/validation, actual local RPC, off clears presence, edit preservation and restart persistence.');
+  await control.locator('#discord-advanced summary').click();
+  await control.locator('#discord-id').fill('');
+  await control.locator('#discord-form button[type="submit"]').click();
+  await wait(async () => (await control.evaluate(() => libertyControl.getState())).discord.applicationId === DEFAULT_DISCORD_APPLICATION_ID);
+  const nextHandshake = handshakes.length;
+  await control.locator('#discord-enabled').check();
+  await wait(() => handshakes.length > nextHandshake); assert.equal(handshakes.at(-1).client_id, DEFAULT_DISCORD_APPLICATION_ID);
+  await app.close(); app = null;
+  const reset = JSON.parse(await readFile(join(profile, 'widget.json'), 'utf8'));
+  assert.equal(reset.discordApplicationId, DEFAULT_DISCORD_APPLICATION_ID); assert.equal(reset.discordEnabled, true);
+  console.log('PASS: real Electron fades and saved volume, disabled fade, source-switch cancellation, one-switch Discord connection with the shared ID, optional custom ID migration/reset, actual local RPC, off clears presence, edit preservation and restart persistence.');
 } finally {
   await app?.close(); for (const socket of sockets) socket.destroy();
   if (server?.listening) await new Promise(resolve => server.close(resolve));

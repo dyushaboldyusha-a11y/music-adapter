@@ -4,13 +4,13 @@
     let dirty = false, current;
     $('smooth-playback').addEventListener('change', () => action('preferences', { smoothPlayback: $('smooth-playback').checked }));
     $('discord-id').addEventListener('input', () => { dirty = true; });
-    async function save(enabled) {
-      const result = await action('discord', { enabled, applicationId: $('discord-id').value.trim() });
-      if (result.ok) dirty = false;
-      else $('discord-enabled').checked = current?.enabled === true;
+    async function save(enabled, applicationId) {
+      const result = await action('discord', { enabled, ...(applicationId === undefined ? {} : { applicationId }) });
+      if (result.ok && applicationId !== undefined) dirty = false;
+      if (!result.ok) $('discord-enabled').checked = current?.enabled === true;
     }
     $('discord-enabled').addEventListener('change', () => save($('discord-enabled').checked));
-    $('discord-form').addEventListener('submit', event => { event.preventDefault(); save(current?.enabled === true); });
+    $('discord-form').addEventListener('submit', event => { event.preventDefault(); save(current?.enabled === true, $('discord-id').value.trim()); });
     $('discord-portal').addEventListener('click', () => action('discordPortal'));
     function update(state) {
       $('smooth-playback').checked = state.preferences.smoothPlayback === true;
