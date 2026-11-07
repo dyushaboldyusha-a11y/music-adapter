@@ -16,7 +16,7 @@ function frame(opcode, data) {
   header.writeUInt32LE(opcode, 0); header.writeUInt32LE(body.length, 4); return Buffer.concat([header, body]);
 }
 function ipcPath(index, platform = process.platform, env = process.env) {
-  return platform === 'win32' ? `\\\\?\\pipe\\discord-ipc-${index}` : path.join(env.XDG_RUNTIME_DIR || env.TMPDIR || env.TMP || env.TEMP || os.tmpdir(), `discord-ipc-${index}`);
+  return platform === 'win32' ? `\\\\?\\pipe\\discord-ipc-${index}` : path.posix.join(env.XDG_RUNTIME_DIR || env.TMPDIR || env.TMP || env.TEMP || os.tmpdir(), `discord-ipc-${index}`);
 }
 function activityFor(state, { now = Date.now(), position = state?.position || 0, cover = null } = {}) {
   if (!state?.connected || !state.title?.trim()) return null;
