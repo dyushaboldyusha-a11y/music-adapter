@@ -19,6 +19,7 @@
     "dist:win": "electron-builder --win portable --x64",
     "pack:win": "electron-builder --win --dir --x64",
     "test:features": "node scripts/smoke-features.mjs",
+    "test:playback": "node scripts/smoke-playback.mjs",
     "test:control": "node scripts/smoke-control.mjs",
     "test:update-network": "electron scripts/check-update-network.cjs",
     "test:personalization": "node scripts/smoke-personalization.mjs",
@@ -50,6 +51,7 @@
     "files": [
       "src/**/*",
       "browser-extension/services.js",
+      "browser-extension/playback-fade.js",
       "package.json"
     ],
     "extraResources": [

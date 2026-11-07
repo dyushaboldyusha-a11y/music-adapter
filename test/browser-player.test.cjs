@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const api = require('../browser-extension/services.js');
+const { PlaybackFade } = require('../browser-extension/playback-fade.js');
 const source = fs.readFileSync(require.resolve('../browser-extension/player-world.js'), 'utf8');
 function player(url, media) {
   const messages = [], listeners = [], timers = [], original = new Map();
@@ -15,6 +16,7 @@ function player(url, media) {
   const session = { metadata: { title: 'Track', artist: 'Artist', artwork: [] }, playbackState: 'playing', setActionHandler: (action, fn) => original.set(action, fn), setPositionState: () => {} };
   const window = { Audio: FakeAudio, postMessage: data => messages.push(data), addEventListener: (_type, fn) => listeners.push(fn) };
   const context = { window, HTMLMediaElement: FakeAudio, navigator: { mediaSession: session }, location: new URL(url), document: { addEventListener: () => {}, querySelector: () => null, querySelectorAll: () => media ? [media] : [], title: 'Page' }, performance: { now: () => now }, Date: class extends Date { static now() { return 1700000000000 + now; } }, queueMicrotask: fn => fn(), setInterval: fn => timers.push(fn), URL, LibertyServices: api, getComputedStyle: () => ({ backgroundImage: 'none' }) };
+  context.LibertyPlaybackFade = PlaybackFade;
   vm.runInNewContext(source, context);
   return { session, messages, original, window, advance: ms => { now += ms; }, publish: () => timers[0](), command: async (command, value) => listeners[0]({ source: window, origin: new URL(url).origin, data: { channel: 'liberty-player-v1', type: 'command', id: 'command-1', command, value } }) };
 }

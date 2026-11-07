@@ -59,6 +59,7 @@
       "js": [
         "services.js",
         "vk-player.js",
+        "playback-fade.js",
         "player-world.js"
       ],
       "run_at": "document_start",

@@ -2,8 +2,9 @@ const { EventEmitter } = require('node:events');
 const { spawn } = require('node:child_process');
 const { createInterface } = require('node:readline');
 const { descriptor } = require('./sources.cjs');
+const { artworkUrl } = require('./artwork-url.cjs');
 
-const COMMANDS = new Set(['playPause', 'next', 'previous', 'seek', 'shuffle', 'repeat', 'volume', 'mute']);
+const COMMANDS = new Set(['playPause', 'next', 'previous', 'seek', 'shuffle', 'repeat', 'volume', 'mute', 'fadePlayback']);
 const EMPTY_STATE = Object.freeze({ connected: false, title: '', artist: '', album: '', artwork: null, playing: false, position: 0, duration: 0, shuffle: false, repeat: 'none', volume: null, muted: false, capabilities: {}, error: null });
 
 function validateCommand(command, value) {
@@ -13,12 +14,13 @@ function validateCommand(command, value) {
   if (command === 'repeat' && !['none', 'track', 'list'].includes(value)) throw new Error('Некорректный режим повтора');
   if (command === 'volume' && (!Number.isFinite(value) || value < 0 || value > 1)) throw new Error('Некорректная громкость');
   if (command === 'mute' && typeof value !== 'boolean') throw new Error('Некорректное состояние звука');
+  if (command === 'fadePlayback' && (!value || Object.keys(value).length !== 1 || !Number.isInteger(value.duration) || value.duration < 150 || value.duration > 1500)) throw new Error('Некорректная длительность перехода');
 }
 
 function normalizeState(input = {}) {
   const numeric = value => Number.isFinite(value) && value >= 0 ? value : 0;
   const artwork = typeof input.artwork === 'string' && /^data:image\/(png|jpe?g|webp|gif|bmp);base64,[A-Za-z0-9+/=]+$/i.test(input.artwork) && input.artwork.length < 12_000_000 ? input.artwork : null;
-  return { ...EMPTY_STATE, connected: input.connected === true, title: String(input.title || '').slice(0, 500), artist: String(input.artist || '').slice(0, 500), album: String(input.album || '').slice(0, 500), artwork, playing: input.playing === true, live: input.live === true, position: Math.min(numeric(input.position), numeric(input.duration)), duration: numeric(input.duration), playbackRate: Number.isFinite(input.playbackRate) ? Math.max(0, Math.min(16, input.playbackRate)) : 1, sampledAt: Number.isFinite(input.sampledAt) && input.sampledAt > 0 ? input.sampledAt : null, sampleOrigin: typeof input.sampleOrigin === 'string' ? input.sampleOrigin.slice(0, 80) : '', sampleSequence: Number.isSafeInteger(input.sampleSequence) && input.sampleSequence >= 0 ? input.sampleSequence : null, timelineEpoch: Number.isSafeInteger(input.timelineEpoch) ? input.timelineEpoch : 0, shuffle: input.shuffle === true, repeat: ['none', 'track', 'list'].includes(input.repeat) ? input.repeat : 'none', volume: Number.isFinite(input.volume) ? Math.max(0, Math.min(1, input.volume)) : null, muted: input.muted === true, capabilities: Object.fromEntries([...COMMANDS].map(key => [key, input.capabilities?.[key] === true])), source: descriptor(input.source), sources: Array.isArray(input.sources) ? input.sources.map(descriptor).filter(Boolean).slice(0, 30) : [], error: input.error ? String(input.error).slice(0, 500) : null };
+  return { ...EMPTY_STATE, connected: input.connected === true, title: String(input.title || '').slice(0, 500), artist: String(input.artist || '').slice(0, 500), album: String(input.album || '').slice(0, 500), artwork, artworkUrl: artworkUrl(input.artworkUrl), playing: input.playing === true, live: input.live === true, position: Math.min(numeric(input.position), numeric(input.duration)), duration: numeric(input.duration), playbackRate: Number.isFinite(input.playbackRate) ? Math.max(0, Math.min(16, input.playbackRate)) : 1, sampledAt: Number.isFinite(input.sampledAt) && input.sampledAt > 0 ? input.sampledAt : null, sampleOrigin: typeof input.sampleOrigin === 'string' ? input.sampleOrigin.slice(0, 80) : '', sampleSequence: Number.isSafeInteger(input.sampleSequence) && input.sampleSequence >= 0 ? input.sampleSequence : null, timelineEpoch: Number.isSafeInteger(input.timelineEpoch) ? input.timelineEpoch : 0, shuffle: input.shuffle === true, repeat: ['none', 'track', 'list'].includes(input.repeat) ? input.repeat : 'none', volume: Number.isFinite(input.volume) ? Math.max(0, Math.min(1, input.volume)) : null, muted: input.muted === true, capabilities: Object.fromEntries([...COMMANDS].map(key => [key, input.capabilities?.[key] === true])), source: descriptor(input.source), sources: Array.isArray(input.sources) ? input.sources.map(descriptor).filter(Boolean).slice(0, 30) : [], error: input.error ? String(input.error).slice(0, 500) : null };
 }
 
 class WindowsMedia extends EventEmitter {

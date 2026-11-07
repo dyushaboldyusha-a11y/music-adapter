@@ -7,6 +7,8 @@ const { launchPortableInstaller } = require('./install-launcher.cjs');
 const { createUpdateFetch } = require('./update-fetch.cjs');
 const { WindowsMedia, DemoMedia, EMPTY_STATE, validateCommand } = require('./media.cjs');
 const { WindowsAudio, VolumeQueue } = require('./audio.cjs');
+const { PlaybackFade } = require('../browser-extension/playback-fade.js');
+const { DiscordPresence, clientId: discordClientId } = require('./discord-presence.cjs');
 const { widgetSize, DEFAULT_PREFERENCES, preferences, layoutForDisplays, snapBounds } = require('./window-state.cjs');
 const { validatePreferences, exportSettings, importSettings } = require('./customization.cjs');
 const { artworkColor } = require('./artwork-color.cjs');
@@ -32,9 +34,10 @@ app.setName(APP_NAME);
 if (process.platform === 'win32') app.setAppUserModelId('io.musicadapter.widget');
 const demo = process.argv.includes('--demo');
 let controls, controlCapture = false, visibility, fadeTimer, snapTimer, cachedArtwork, artworkAccent;
-let window, tray, media, saveTimer, placement, browserBridge, shortcuts, updater, audio;
+let window, tray, media, saveTimer, placement, browserBridge, shortcuts, updater, audio, discord;
 let mediaState = { ...EMPTY_STATE }, audioLevel = { available: false, level: 0 };
-const volumeQueue = new VolumeQueue(() => state, mediaCommand);
+const playbackFade = new PlaybackFade(() => state, rawMediaCommand);
+const volumeQueue = new VolumeQueue(() => playbackFade.active && playbackFade.active.state.source?.id === state.source?.id ? { ...state, volume: playbackFade.active.volume } : state, mediaCommand);
 let effectiveScale = 1, profiles, automation, automationState = normalizeAutomation();
 let voiceFeedback = null, voiceFeedbackTimer;
 const voiceGate = new VoiceGate(() => state, mediaCommand, volumeQueue, (result, label, heard) => {
@@ -79,6 +82,7 @@ function refreshState() {
   }
   audio?.configure({ target: native && state.connected ? state.source.appId : '', enabled: !!native && state.connected && state.playing && effectiveSettings().waveIntensity > 0 && (effectiveSettings().waveMode === 'audio' || effectiveSettings().coverPulse || effectiveSettings().rhythmBars || effectiveSettings().beatGlow), economy: effectiveSettings().waveEconomy === true });
   updateVoiceVisibility();
+  discord?.update(state);
   publish();
 }
 function save() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch (error) { console.error('Cannot save preferences', error.message); } }, 250); }
@@ -99,18 +103,24 @@ async function mediaCommand(command, value) {
   try {
     validateCommand(command, value);
     if (!media || !state.connected || !state.capabilities?.[command]) throw new Error('Источник не предоставляет эту команду');
-    const sourceId = state.source?.id;
-    if (['volume', 'mute'].includes(command) && sourceId?.startsWith('native:')) await audio.command(command, value, state.source.appId);
-    else await media.command(command, value);
-    // Browser transport acknowledges before its next sync. Keep subsequent held
-    // volume shortcuts relative to the value that was actually accepted.
-    if (state.source?.id === sourceId && ['volume', 'mute'].includes(command)) {
-      if (command === 'volume') { mediaState.volume = value; if (value > 0) mediaState.muted = false; }
-      else mediaState.muted = value;
-      refreshState();
-    }
+    await playbackFade.command(command, value, { enabled: effectivePreferences().smoothPlayback && !state.source?.id?.startsWith('web:') });
     return { ok: true };
   } catch (error) { return { ok: false, error: error.message }; }
+}
+async function rawMediaCommand(command, value, target) {
+  const sourceId = target.source?.id;
+  if (['volume', 'mute'].includes(command) && sourceId?.startsWith('native:')) await audio.command(command, value, target.source.appId);
+  else {
+    if (command === 'playPause' && sourceId?.startsWith('web:') && target.capabilities?.fadePlayback && effectivePreferences().smoothPlayback) { command = 'fadePlayback'; value = { duration: 600 }; }
+    await media.command(command, value, sourceId);
+  }
+  // Browser transport acknowledges before its next sync. Keep subsequent held
+  // volume shortcuts relative to the value that was actually accepted.
+  if (state.source?.id === sourceId && ['volume', 'mute'].includes(command)) {
+    if (command === 'volume') { mediaState.volume = value; if (value > 0) mediaState.muted = false; }
+    else mediaState.muted = value;
+    refreshState();
+  }
 }
 async function shortcutMediaCommand(command) {
   if (shortcutCommandPending) return;
@@ -121,6 +131,7 @@ async function shortcutMediaCommand(command) {
 function setPreferences(update) {
   validatePreferences(update, DEFAULT_PREFERENCES);
   const next = preferences({ ...effectivePreferences(), ...update });
+  if (update.smoothPlayback === false) playbackFade.cancel().catch(error => console.warn(error.message));
   profiles.edit(next, settings);
   settings.appProfiles = profiles.saved();
   if (['compact', 'scale', 'monitor', 'edgeMargin', 'rhythmBars'].some(key => Object.hasOwn(update, key))) restoreLayout();
@@ -128,7 +139,7 @@ function setPreferences(update) {
   updateTray();
 }
 function updateTray() { if (tray) tray.setToolTip(`${APP_NAME} · нажмите, чтобы открыть приложение`); }
-async function selectSource(id) { try { if (typeof id !== 'string' || id.length > 200) throw new Error('Некорректный источник'); await media.selectSource(id); return { ok: true }; } catch (error) { return { ok: false, error: error.message }; } }
+async function selectSource(id) { try { if (typeof id !== 'string' || id.length > 200) throw new Error('Некорректный источник'); await playbackFade.cancel(); await media.selectSource(id); return { ok: true }; } catch (error) { return { ok: false, error: error.message }; } }
 async function openMusic(provider = state.source?.provider || 'yandex', nativeApp = false) {
   const service = PROVIDERS.get(provider);
   if (!service) return { ok: false, error: 'Выберите музыкальный сервис' };
@@ -137,7 +148,7 @@ async function openMusic(provider = state.source?.provider || 'yandex', nativeAp
   catch { return { ok: false, error: 'Откройте плеер самостоятельно' }; }
 }
 function controlSnapshot() {
-  return { ...snapshot(), preferences: effectivePreferences(), displays: screen.getAllDisplays().map((d, index) => ({ id: String(d.id), name: d.label || `Монитор ${index + 1}`, width: d.workArea.width, height: d.workArea.height })), effectiveScale, version: app.getVersion(), pairedBrowsers: browserBridge?.clients.size || 0, pairing: browserBridge?.pairing || null, controlCapture, voiceCommands: VOICE_COMMANDS.commands, positions: Object.fromEntries(['bounds', 'compactBounds'].filter(key => effectiveSettings()[key]).map(key => [key, effectiveSettings()[key]])), appProfiles: profiles.snapshot(), automation: { ...automationState, supported: process.platform === 'win32', enabled: settings.voiceEnabled === true, mode: voiceMode(), feedback: voiceFeedback, microphone: settings.voiceMicrophone || 'default' } };
+  return { ...snapshot(), preferences: effectivePreferences(), displays: screen.getAllDisplays().map((d, index) => ({ id: String(d.id), name: d.label || `Монитор ${index + 1}`, width: d.workArea.width, height: d.workArea.height })), effectiveScale, version: app.getVersion(), pairedBrowsers: browserBridge?.clients.size || 0, pairing: browserBridge?.pairing || null, controlCapture, voiceCommands: VOICE_COMMANDS.commands, discord: discord?.snapshot(), positions: Object.fromEntries(['bounds', 'compactBounds'].filter(key => effectiveSettings()[key]).map(key => [key, effectiveSettings()[key]])), appProfiles: profiles.snapshot(), automation: { ...automationState, supported: process.platform === 'win32', enabled: settings.voiceEnabled === true, mode: voiceMode(), feedback: voiceFeedback, microphone: settings.voiceMicrophone || 'default' } };
 }
 async function openControls(page = 'home') {
   if (!['home', 'sources', 'appearance', 'shortcuts', 'updates'].includes(page)) return { ok: false, error: 'Неизвестный раздел' };
@@ -150,6 +161,13 @@ function endControlCapture() {
 }
 async function controlAction(action, value) {
   switch (action) {
+    case 'discord':
+      if (!value || typeof value.enabled !== 'boolean' || typeof value.applicationId !== 'string') throw new Error('Некорректные настройки Discord');
+      if (value.applicationId) discordClientId(value.applicationId);
+      if (value.enabled && !value.applicationId) throw new Error('Сначала укажите Application ID приложения Discord');
+      settings.discordEnabled = value.enabled; settings.discordApplicationId = value.applicationId;
+      discord.configure(value); save(); publish(); return { ok: true };
+    case 'discordPortal': await shell.openExternal('https://discord.com/developers/applications'); return { ok: true };
     case 'export': {
       const result = await dialog.showSaveDialog(controls.window, { title: 'Экспорт настроек Liberty Wave', defaultPath: 'Liberty-Wave-settings.json', filters: [{ name: 'Настройки JSON', extensions: ['json'] }] });
       if (result.canceled || !result.filePath) return { ok: true, cancelled: true };
@@ -225,6 +243,9 @@ async function start() {
   } });
   await updater.initialize().catch(error => updater.fail(error));
   updater.on('state', publish);
+  discord = new DiscordPresence({ fetch: (url, options) => net.fetch(url, { ...options, credentials: 'omit' }) });
+  discord.on('state', () => controls?.publish());
+  discord.configure({ enabled: settings.discordEnabled === true, applicationId: settings.discordApplicationId || '' });
   controls = new ControlWindow({ BrowserWindow, ipcMain, screen, icon: nativeImage.createFromPath(ICON_PATH), getState: controlSnapshot, action: controlAction, getBounds: () => settings.controlBounds, saveBounds: value => { settings.controlBounds = value; save(); }, onBlur: endControlCapture });
   const initial = layoutForDisplays(effectiveSettings()[boundsKey()], screen.getAllDisplays(), effectiveSettings().scale, widgetSize(effectiveSettings()), effectivePreferences());
   effectiveScale = initial.scale;
@@ -270,7 +291,7 @@ async function start() {
     audio.on('level', value => { if (state.source?.kind === 'app' && state.source?.appId === value.target) sendAudioLevel(value); });
     audio.start();
   }
-  media.on('state', value => { const sourceChanged = value.source?.id !== state.source?.id; const changed = JSON.stringify([value.connected, value.selection, value.sources?.map(s => [s.id,s.title])]) !== JSON.stringify([state.connected, state.selection, state.sources?.map(s => [s.id,s.title])]); if (value.source?.id !== state.source?.id) { voiceGate.cancel(); voiceFeedback = null; } if (value.source?.id !== state.source?.id || !value.playing) sendAudioLevel({ available: false, level: 0 }); mediaState = value; refreshState(); if (sourceChanged) configureAutomation(); if (changed) updateTray(); });
+  media.on('state', value => { const sourceChanged = value.source?.id !== state.source?.id; const changed = JSON.stringify([value.connected, value.selection, value.sources?.map(s => [s.id,s.title])]) !== JSON.stringify([state.connected, state.selection, state.sources?.map(s => [s.id,s.title])]); if (value.source?.id !== state.source?.id) { voiceGate.cancel(); voiceFeedback = null; } if (value.source?.id !== state.source?.id || !value.playing) sendAudioLevel({ available: false, level: 0 }); playbackFade.observe(value).catch(error => console.warn(error.message)); mediaState = value; refreshState(); if (sourceChanged) configureAutomation(); if (changed) updateTray(); });
   browserBridge.on('level', value => { if (value.sourceId === state.source?.id) sendAudioLevel(value); });
   browserBridge.on('change', () => controls.publish());
   media.start();
@@ -295,5 +316,12 @@ async function start() {
   if (!demo && !process.argv.includes('--widget-only')) await openControls();
 }
 function sendAudioLevel(value) { audioLevel = state.playing ? value : { available: false, level: 0 }; if (window && !window.isDestroyed()) window.webContents.send('widget:audio-level', audioLevel); }
-app.on('before-quit', () => { controls?.dispose(); updater?.stop(); placement?.dispose(); visibility?.dispose(); clearTimeout(fadeTimer); clearTimeout(snapTimer); clearTimeout(saveTimer); clearTimeout(voiceFeedbackTimer); if (window && !window.isDestroyed()) { rememberBounds(window.getBounds()); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } automation?.stop(); voiceGate.cancel(); audio?.stop(); media?.stop(); browserBridge?.stop(); shortcuts?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
+let quitting = false;
+app.on('before-quit', event => {
+  if (!quitting) {
+    event.preventDefault(); quitting = true;
+    Promise.race([Promise.allSettled([playbackFade.stop(), discord?.stop()]), new Promise(resolve => setTimeout(resolve, 1200))]).finally(() => app.quit());
+    return;
+  }
+  controls?.dispose(); updater?.stop(); placement?.dispose(); visibility?.dispose(); clearTimeout(fadeTimer); clearTimeout(snapTimer); clearTimeout(saveTimer); clearTimeout(voiceFeedbackTimer); if (window && !window.isDestroyed()) { rememberBounds(window.getBounds()); try { fs.writeFileSync(path.join(app.getPath('userData'), 'widget.json'), JSON.stringify(settings)); } catch {} } automation?.stop(); voiceGate.cancel(); audio?.stop(); media?.stop(); browserBridge?.stop(); shortcuts?.stop(); globalShortcut.unregisterAll(); tray?.destroy(); });
 app.on('window-all-closed', () => app.quit());

@@ -76,9 +76,17 @@
       album: metadata?.album || '', artworkUrl, playing, duration, position: Math.max(0, Math.min(duration, position)), live: media?.duration === Infinity,
       volume: media ? media.volume : vkState?.volume ?? null, muted: media ? media.muted : vkState?.muted === true,
       sampledAt: Date.now(), sampleOrigin, sampleSequence: ++sequence, playbackRate, timelineEpoch,
-      capabilities: { playPause: !!media || !!button(service.play) || handlers.has(playing ? 'pause' : 'play') || !!vkState?.capabilities.playPause, next: handlers.has('nexttrack') || !!button(service.next) || !!vkState?.capabilities.next, previous: handlers.has('previoustrack') || !!button(service.previous) || !!vkState?.capabilities.previous, seek: duration > 0 && (handlers.has('seekto') || !!media?.seekable?.length || !!vkState?.capabilities.seek), shuffle: false, repeat: false, volume: !!media || !!vkState?.capabilities.volume, mute: !!media || !!vkState?.capabilities.mute }
+      capabilities: { fadePlayback: (!!media || !!vkState?.capabilities.volume) && (!!media || !!vkState?.capabilities.playPause), playPause: !!media || !!button(service.play) || handlers.has(playing ? 'pause' : 'play') || !!vkState?.capabilities.playPause, next: handlers.has('nexttrack') || !!button(service.next) || !!vkState?.capabilities.next, previous: handlers.has('previoustrack') || !!button(service.previous) || !!vkState?.capabilities.previous, seek: duration > 0 && (handlers.has('seekto') || !!media?.seekable?.length || !!vkState?.capabilities.seek), shuffle: false, repeat: false, volume: !!media || !!vkState?.capabilities.volume, mute: !!media || !!vkState?.capabilities.mute }
     };
   }
+  const fade = new LibertyPlaybackFade(() => ({ ...snapshot(), connected: true, source: { id: sampleOrigin }, playbackIdentity: mediaElement() || vk }), (action, value, target) => {
+    if (action === 'volume' && target.playbackIdentity && target.playbackIdentity !== vk) {
+      if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error('Некорректная громкость');
+      target.playbackIdentity.volume = value; if (value > 0) target.playbackIdentity.muted = false; publish(); return;
+    }
+    if ((mediaElement() || vk) !== target.playbackIdentity) throw new Error('Плеер во вкладке изменился');
+    return command(action, value);
+  });
   function publish() { window.postMessage({ channel: 'liberty-player-v1', type: 'state', state: snapshot() }, location.origin); }
   async function command(action, value) {
     const state = snapshot();
@@ -103,12 +111,17 @@
     if (event.source !== window || event.origin !== location.origin || event.data?.channel !== 'liberty-player-v1') return;
     const data = event.data;
     if (data.type === 'refresh') { publish(); return; }
-    if (data.type !== 'command' || !['playPause', 'next', 'previous', 'seek', 'volume', 'mute'].includes(data.command) || typeof data.id !== 'string') return;
-    try { await command(data.command, data.value); window.postMessage({ channel: 'liberty-player-v1', type: 'result', id: data.id, ok: true }, location.origin); }
+    if (data.type !== 'command' || !['playPause', 'fadePlayback', 'next', 'previous', 'seek', 'volume', 'mute'].includes(data.command) || typeof data.id !== 'string') return;
+    try {
+      if (data.command === 'fadePlayback' && (!data.value || !Number.isInteger(data.value.duration) || data.value.duration < 150 || data.value.duration > 1500)) throw new Error('Некорректная длительность перехода');
+      await fade.command(data.command === 'fadePlayback' ? 'playPause' : data.command, data.value, { enabled: data.command === 'fadePlayback', duration: data.value?.duration });
+      window.postMessage({ channel: 'liberty-player-v1', type: 'result', id: data.id, ok: true }, location.origin);
+    }
     catch (error) { window.postMessage({ channel: 'liberty-player-v1', type: 'result', id: data.id, ok: false, error: error.message }, location.origin); }
   });
   for (const event of ['play', 'pause', 'ended', 'durationchange', 'seeked']) document.addEventListener(event, e => { remember(e.target); publish(); }, true);
   document.addEventListener('visibilitychange', publish);
+  window.addEventListener('pagehide', () => fade.cancel().catch(() => {}));
   setInterval(publish, 1000);
   publish();
 })();

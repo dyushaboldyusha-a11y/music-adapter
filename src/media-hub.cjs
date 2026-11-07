@@ -48,9 +48,10 @@ class MediaHub extends EventEmitter {
     this.reconnecting = false;
     this.selection = id; this.refresh();
   }
-  async command(command, value) {
+  async command(command, value, sourceId) {
     validateCommand(command, value);
     const state = this.state;
+    if (sourceId && sourceId !== state?.source?.id) throw new Error('Источник музыки изменился');
     if (!state?.connected || !state.capabilities?.[command] || !state.source) throw new Error('Команда недоступна у выбранного источника');
     if (state.source.id.startsWith('web:')) return this.browser.command(state.source.id, command, value);
     return this.native.command(command, value, state.source.id);

@@ -63,8 +63,8 @@ try {
       if(!vk){
       navigator.mediaSession.playbackState='playing';
       navigator.mediaSession.setPositionState({duration:258,position:84});
-      navigator.mediaSession.setActionHandler('pause',()=>{window.testActions.push('pause');navigator.mediaSession.playbackState='paused';});
-      navigator.mediaSession.setActionHandler('play',()=>{window.testActions.push('play');navigator.mediaSession.playbackState='playing';});
+      navigator.mediaSession.setActionHandler('pause',()=>{window.testActions.push('pause');navigator.mediaSession.playbackState='paused';window.fixtureAudio?.pause();});
+      navigator.mediaSession.setActionHandler('play',async()=>{window.testActions.push('play');navigator.mediaSession.playbackState='playing';await window.fixtureAudio?.play();});
       navigator.mediaSession.setActionHandler('nexttrack',()=>{window.testActions.push('next');metadata(' next');});
       navigator.mediaSession.setActionHandler('previoustrack',()=>{window.testActions.push('previous');metadata();});
       navigator.mediaSession.setActionHandler('seekto',event=>{window.testActions.push('seek:'+event.seekTime);navigator.mediaSession.setPositionState({duration:258,position:event.seekTime});});
@@ -113,6 +113,18 @@ try {
     await waitState(widget, s => s.muted);
     await widget.locator('#mute').click(); await page.waitForFunction(() => !window.fixtureAudio.muted);
     await waitState(widget, s => !s.muted);
+    await waitState(widget, s => s.capabilities.fadePlayback && !s.playing);
+    await page.evaluate(() => {
+      window.fadeLevels = [];
+      fixtureAudio.addEventListener('volumechange', () => fadeLevels.push(fixtureAudio.volume));
+    });
+    assert.equal((await widget.evaluate(() => musicWidget.command('playPause'))).ok, true);
+    await waitState(widget, s => s.playing && Math.abs(s.volume - .3) < .001);
+    assert.ok((await page.evaluate(() => fadeLevels)).some(level => level > 0 && level < .3), `${service.id}: resume must have intermediate volume levels`);
+    await page.evaluate(() => { fadeLevels.length = 0; });
+    assert.equal((await widget.evaluate(() => musicWidget.command('playPause'))).ok, true);
+    await waitState(widget, s => !s.playing && Math.abs(s.volume - .3) < .001);
+    assert.ok((await page.evaluate(() => fadeLevels)).some(level => level > 0 && level < .3), `${service.id}: pause must fade inside the tab`);
   }
   const button = widget.locator('#play-pause');
   const box = await button.boundingBox();

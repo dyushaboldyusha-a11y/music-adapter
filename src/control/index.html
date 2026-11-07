@@ -55,6 +55,15 @@
           <label class="setting-row"><span><strong>Компактный режим</strong><small>Небольшая полоска с музыкой и кнопками</small></span><input id="compact" class="switch" type="checkbox"></label>
           <button id="restore" class="setting-row link-row"><span><strong>Вернуть виджет на экран</strong><small>Разместить в правом верхнем углу</small></span><svg><use href="#arrow-icon"/></svg></button>
         </div>
+        <h3 class="section-title">Воспроизведение</h3>
+        <div class="card settings-list"><label class="setting-row"><span><strong>Плавный старт и пауза</strong><small>Громкость нарастает и затухает за 0,6 секунды. Работает при управлении через Wave, если плеер предоставляет громкость.</small></span><input id="smooth-playback" class="switch" type="checkbox"></label></div>
+        <h3 class="section-title">Discord</h3>
+        <div class="card personal-card" id="discord-card">
+          <label class="setting-row"><span><strong>Показывать музыку в Discord</strong><small>Название, исполнитель, обложка и прогресс выбранного трека</small></span><input id="discord-enabled" class="switch" type="checkbox"></label>
+          <p class="footnote" id="discord-status" role="status" aria-live="polite"></p>
+          <form id="discord-form"><label for="discord-id">Application ID приложения Liberty Wave в Discord</label><div class="microphone-controls"><input id="discord-id" type="text" inputmode="numeric" pattern="[1-9][0-9]{16,19}" maxlength="20" autocomplete="off" spellcheck="false" placeholder="Публичный числовой ID"><button type="submit">Сохранить ID</button><button type="button" id="discord-portal">Открыть Developer Portal</button></div></form>
+          <p class="footnote">Один раз создайте приложение с именем Liberty Wave в Developer Portal и скопируйте Application ID из General Information. Токен не нужен. Требуются запущенный настольный Discord и разрешённый показ активности в его настройках. Для обложек из Windows название и исполнитель ищутся в Apple Music; звук и микрофон не передаются.</p>
+        </div>
         <h3 class="section-title">Источник музыки</h3>
         <div class="card source-choice"><label for="home-source">Выбранный плеер</label><select id="home-source" aria-label="Источник музыки"></select><button class="text-button" data-go="sources">Подключить другой источник <span>→</span></button></div>
         <p class="footnote">Закрытие этого окна оставит виджет работающим. Открыть Liberty Wave снова можно через значок в трее или запуск приложения.</p>
@@ -89,6 +98,6 @@
       </section>
     </main>
   </div>
-  <script src="../shared/theme.js"></script><script src="../shared/shortcuts.js"></script><script src="../renderer/playback-clock.js"></script><script src="theme.js"></script><script src="shortcuts.js"></script><script src="personalization.js"></script><script src="automation.js"></script><script src="renderer.js"></script>
+  <script src="../shared/theme.js"></script><script src="../shared/shortcuts.js"></script><script src="../renderer/playback-clock.js"></script><script src="theme.js"></script><script src="shortcuts.js"></script><script src="personalization.js"></script><script src="automation.js"></script><script src="playback.js"></script><script src="renderer.js"></script>
 </body>
 </html>
