@@ -1,7 +1,7 @@
 {
   "name": "liberty-wave",
   "productName": "Liberty Wave",
-  "version": "0.6.10",
+  "version": "0.7.0",
   "description": "Liberty Wave — музыкальный виджет для приложений и браузеров",
   "author": "Liberty",
   "license": "MIT",
@@ -20,6 +20,7 @@
     "pack:win": "electron-builder --win --dir --x64",
     "test:features": "node scripts/smoke-features.mjs",
     "test:playback": "node scripts/smoke-playback.mjs",
+    "test:glass": "node scripts/smoke-glass.mjs",
     "test:control": "node scripts/smoke-control.mjs",
     "test:update-network": "electron scripts/check-update-network.cjs",
     "test:personalization": "node scripts/smoke-personalization.mjs",

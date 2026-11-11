@@ -68,6 +68,7 @@ try {
   assert.equal((await panel.evaluate(() => libertyControl.action('__proto__'))).ok, false);
   await panel.keyboard.press('Escape');
   await panel.locator('[data-page="appearance"]').click();
+  await panel.locator('#palette-target').selectOption('accent');
   await panel.locator('[data-color="#438bff"]').click();
   assert.equal((await panel.evaluate(() => libertyControl.getState())).preferences.color, '#ff3045');
   await panel.locator('#color-hex').fill('#oops'); assert.equal(await panel.locator('#color-save').isDisabled(), true);
@@ -88,7 +89,7 @@ try {
       await assertAccentContrast(panel, '#compact', 3, '::after');
       await panel.locator('#compact').check(); await waitState(panel, s => s.compact);
       await widget.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--red').trim() === '#ffffff', null, { polling: 50 });
-      assert.equal(await widget.locator('#play-pause').evaluate(el => getComputedStyle(el).color), 'rgb(255, 255, 255)');
+      await assertAccentContrast(widget, '#play-pause', 4.5);
       await mkdir(join(root, 'artifacts'), { recursive: true });
       await panel.screenshot({ path: join(root, 'artifacts/control-white-theme.png') });
     }
@@ -96,7 +97,8 @@ try {
   await panel.locator('[data-page="appearance"]').click();
   await panel.locator('[data-color="#438bff"]').click(); await panel.locator('#color-save').click();
   await waitState(panel, s => s.preferences.color === '#438bff');
-  assert.equal(await widget.locator('#play-pause').evaluate(el => getComputedStyle(el).color), 'rgb(67, 139, 255)');
+  await widget.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue('--red').trim() === '#438bff');
+  await assertAccentContrast(widget, '#play-pause', 4.5);
   await panel.locator('#opacity').evaluate(el => { el.value = 25; el.dispatchEvent(new Event('input')); el.dispatchEvent(new Event('change')); });
   await waitState(panel, s => s.preferences.opacity === .25);
   await panel.locator('#wave-mode').selectOption('ambient'); await panel.locator('#wave-economy').check();

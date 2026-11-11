@@ -14,7 +14,7 @@ function update(next) {
   document.body.classList.toggle('compact', state.compact === true);
   document.body.classList.toggle('has-rhythm-bars', state.preferences?.rhythmBars === true);
   audioWave.update(state.preferences, { visible: !state.autoHidden, source: state.source?.id, playing: state.connected && state.playing && !state.muted });
-  LibertyTheme.apply(state.effectiveColor || state.preferences?.color || LibertyTheme.DEFAULT_COLOR);
+  LibertyTheme.apply(state.effectiveColor || state.preferences?.color || LibertyTheme.DEFAULT_COLOR, state.preferences?.surfaceColor);
   document.body.classList.toggle('auto-hidden', state.autoHidden === true);
   for (const [key, className] of [['showArtwork', 'no-artwork'], ['showArtist', 'no-artist'], ['showTime', 'no-time']]) document.body.classList.toggle(className, state.preferences?.[key] === false);
   document.querySelector('.signature').textContent = state.preferences?.nickname || 'Liberty';

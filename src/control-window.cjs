@@ -1,4 +1,6 @@
 const path = require('node:path');
+const { glassWindowOptions } = require('./glass-window.cjs');
+const { palette } = require('./shared/theme.js');
 
 function controlBounds(saved, displays) {
   const valid = saved && ['x', 'y', 'width', 'height'].every(key => Number.isFinite(saved[key]));
@@ -32,7 +34,10 @@ class ControlWindow {
   async open(page = 'home') {
     if (!this.window || this.window.isDestroyed()) {
       const bounds = controlBounds(this.getBounds(), this.screen.getAllDisplays());
-      this.window = new this.BrowserWindow({ ...bounds, minWidth: Math.min(760, bounds.width), minHeight: Math.min(540, bounds.height), title: 'Liberty Wave', icon: this.icon, frame: false, backgroundColor: '#1b1b1e', show: false, webPreferences: { preload: path.join(__dirname, 'control-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+      const material = glassWindowOptions(this.getState().preferences?.surfaceColor);
+      this.nativeGlass = material.backgroundMaterial === 'acrylic';
+      this.backgroundColor = material.backgroundColor;
+      this.window = new this.BrowserWindow({ ...bounds, ...material, minWidth: Math.min(760, bounds.width), minHeight: Math.min(540, bounds.height), title: 'Liberty Wave', icon: this.icon, frame: false, show: false, webPreferences: { preload: path.join(__dirname, 'control-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
       this.window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
       this.window.removeMenu();
       this.window.webContents.on('will-navigate', event => event.preventDefault());
@@ -51,7 +56,15 @@ class ControlWindow {
     this.window.show(); this.window.focus();
     this.publish(); this.window.webContents.send('control:navigate', page);
   }
-  publish() { if (this.window && !this.window.isDestroyed()) this.window.webContents.send('control:state', this.getState()); }
+  publish() {
+    if (!this.window || this.window.isDestroyed()) return;
+    const state = this.getState();
+    if (!this.nativeGlass) {
+      const color = palette(state.preferences?.surfaceColor).tokens['--app-bg'];
+      if (color !== this.backgroundColor) { this.window.setBackgroundColor?.(color); this.backgroundColor = color; }
+    }
+    this.window.webContents.send('control:state', state);
+  }
   dispose() { this.quitting = true; this.onBlur(); this.window?.destroy(); this.ipcMain.removeHandler('control:get-state'); this.ipcMain.removeHandler('control:action'); }
 }
 module.exports = { ControlWindow, controlBounds };

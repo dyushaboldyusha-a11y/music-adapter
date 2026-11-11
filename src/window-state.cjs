@@ -1,12 +1,13 @@
 const SIZE = { width: 620, height: 270 };
 const COMPACT_SIZE = { width: 500, height: 144 };
-const { DEFAULT_COLOR, normalizeColor } = require('./shared/theme.js');
+const { DEFAULT_COLOR, DEFAULT_SURFACE_COLOR, normalizeColor } = require('./shared/theme.js');
 const { EXTRA_DEFAULTS, extras } = require('./customization.cjs');
-const DEFAULT_PREFERENCES = { opacity: 1, scale: 1, color: DEFAULT_COLOR, compact: false, waveMode: 'audio', waveIntensity: .7, waveEconomy: false, ...EXTRA_DEFAULTS };
+const DEFAULT_PREFERENCES = { opacity: 1, scale: 1, color: DEFAULT_COLOR, surfaceColor: DEFAULT_SURFACE_COLOR, compact: false, waveMode: 'audio', waveIntensity: .7, waveEconomy: false, ...EXTRA_DEFAULTS };
 function preferences(input = {}) {
-  let color = DEFAULT_COLOR;
+  let color = DEFAULT_COLOR, surfaceColor = DEFAULT_SURFACE_COLOR;
   try { if (input.color !== undefined) color = normalizeColor(input.color); } catch {}
-  return { opacity: Number.isFinite(input.opacity) ? Math.max(.25, Math.min(1, input.opacity)) : 1, scale: Number.isFinite(input.scale) ? Math.max(.5, Math.min(1.75, input.scale)) : 1, color, compact: input.compact === true, waveMode: ['audio', 'ambient', 'off'].includes(input.waveMode) ? input.waveMode : 'audio', waveIntensity: Number.isFinite(input.waveIntensity) ? Math.max(0, Math.min(1, input.waveIntensity)) : .7, waveEconomy: input.waveEconomy === true, ...extras(input) };
+  try { if (input.surfaceColor !== undefined) surfaceColor = normalizeColor(input.surfaceColor); } catch {}
+  return { opacity: Number.isFinite(input.opacity) ? Math.max(.25, Math.min(1, input.opacity)) : 1, scale: Number.isFinite(input.scale) ? Math.max(.5, Math.min(1.75, input.scale)) : 1, color, surfaceColor, compact: input.compact === true, waveMode: ['audio', 'ambient', 'off'].includes(input.waveMode) ? input.waveMode : 'audio', waveIntensity: Number.isFinite(input.waveIntensity) ? Math.max(0, Math.min(1, input.waveIntensity)) : .7, waveEconomy: input.waveEconomy === true, ...extras(input) };
 }
 function widgetSize(input = {}) {
   const base = input.compact === true ? COMPACT_SIZE : SIZE;

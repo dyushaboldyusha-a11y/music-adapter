@@ -23,6 +23,7 @@ function validatePreferences(update, defaults) {
     if (typeof value !== typeof defaults[key] || typeof value === 'number' && !Number.isFinite(value)) throw new Error('Некорректная настройка: ' + key);
   }
   if (Object.hasOwn(update, 'color')) normalizeColor(update.color);
+  if (Object.hasOwn(update, 'surfaceColor')) normalizeColor(update.surfaceColor);
   if (Object.hasOwn(update, 'nickname')) nickname(update.nickname);
   if (Object.hasOwn(update, 'waveMode') && !['audio', 'ambient', 'off'].includes(update.waveMode)) throw new Error('Некорректный режим волны');
   if (Object.hasOwn(update, 'colorMode') && !['manual', 'artwork'].includes(update.colorMode)) throw new Error('Некорректный режим цвета');

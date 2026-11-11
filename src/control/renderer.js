@@ -88,7 +88,7 @@ function updateUpdates() {
 function update(next) {
   if (!next) return;
   if (state?.source?.id !== next.source?.id) { seeking = false; editingRanges.delete('volume'); }
-  state = next; clock.update(state); theme.update(state); shortcuts.update(state); personalization.update(state); automation.update(state); playback.update(state);
+  state = next; document.documentElement.dataset.nativeGlass = String(state.nativeGlass === true); clock.update(state); theme.update(state); shortcuts.update(state); personalization.update(state); automation.update(state); playback.update(state);
   $('version').textContent = state.version; $('mode-badge').textContent = state.interaction ? 'Управление включено' : 'Закреплён'; $('mode-badge').classList.toggle('editable', state.interaction);
   $('interaction').checked = state.interaction; $('compact').checked = state.preferences.compact;
   $('interaction-description').textContent = state.interaction ? 'Виджет можно перемещать и нажимать его кнопки' : 'Клики проходят сквозь виджет';
