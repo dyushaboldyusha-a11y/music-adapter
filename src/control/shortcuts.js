@@ -5,7 +5,13 @@
     function message(text, error = false) { $('shortcut-status').textContent = text; $('shortcut-status').classList.toggle('error', error); }
     function render() {
       for (const key of Object.keys(api.ACTIONS)) {
-        const button = $(`bind-${key}`); button.textContent = recording === key ? 'Нажмите сочетание…' : api.format(draft[key]); button.classList.toggle('recording', recording === key); button.setAttribute('aria-pressed', String(recording === key)); button.disabled = busy;
+        const button = $(`bind-${key}`), label = recording === key ? 'Нажмите сочетание…' : api.format(draft[key]);
+        button.replaceChildren();
+        label.split('+').forEach((part, index) => {
+          if (index) button.append('+', document.createElement('wbr'));
+          button.append(part);
+        });
+        button.title = label; button.classList.toggle('recording', recording === key); button.setAttribute('aria-pressed', String(recording === key)); button.disabled = busy;
       }
       $('shortcut-save').disabled = busy || !!recording || !dirty; $('shortcut-cancel').disabled = busy || !dirty && !capturing;
     }

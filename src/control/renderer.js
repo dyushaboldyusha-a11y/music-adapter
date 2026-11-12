@@ -6,7 +6,7 @@ const shortcuts = LibertyControlShortcuts.create(action);
 const personalization = LibertyPersonalization.create(action);
 const automation = LibertyAutomationControls.create(action);
 const playback = LibertyPlaybackControls.create(action);
-const services = [['yandex', 'Яндекс Музыка', 'Я', '#ffcc33'], ['spotify', 'Spotify', 'S', '#3cd980'], ['soundcloud', 'SoundCloud', '☁', '#ff9445'], ['youtube', 'YouTube', '▶', '#ff626b'], ['vk', 'VK Музыка', 'VK', '#68a5ff']];
+const services = [['yandex', 'Яндекс Музыка', 'yandex-service-icon', '#ffcc33'], ['spotify', 'Spotify', 'spotify-service-icon', '#3cd980'], ['soundcloud', 'SoundCloud', 'soundcloud-service-icon', '#ff9445'], ['youtube', 'YouTube', 'youtube-service-icon', '#ff626b'], ['vk', 'VK Музыка', 'vk-service-icon', '#68a5ff']];
 const time = value => { const s = Math.floor(Math.max(0, value || 0)); return s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 function message(text, error = false) { clearTimeout(noticeTimer); $('notice').textContent = text; $('notice').hidden = !text; $('notice').classList.toggle('error', error); noticeTimer = setTimeout(() => { $('notice').hidden = true; }, error ? 9000 : 3500); }
 async function action(name, value) {
@@ -27,7 +27,10 @@ $('quit').addEventListener('click', () => action('quit'));
 function sourceName(source) { return source ? `${source.name} · ${source.kind === 'app' ? 'приложение' : source.browser || 'браузер'}` : 'Источник не выбран'; }
 for (const [id, label, icon, color] of services) {
   const row = document.createElement('div'); row.className = 'service-row';
-  const mark = document.createElement('span'); mark.className = 'service-icon'; mark.style.setProperty('--service-color', color); mark.textContent = icon;
+  const mark = document.createElement('span'); mark.className = 'service-icon'; mark.style.setProperty('--service-color', color);
+  mark.style.setProperty('--service-ink', LibertyTheme.contrast(color, '#000000') >= LibertyTheme.contrast(color, '#ffffff') ? '#000000' : '#ffffff');
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  svg.setAttribute('aria-hidden', 'true'); use.setAttribute('href', `#${icon}`); svg.append(use); mark.append(svg);
   const info = document.createElement('div'), name = document.createElement('strong'), status = document.createElement('p'); name.textContent = label; status.id = `service-${id}`; info.append(name, status);
   const buttons = document.createElement('div'); buttons.className = 'service-buttons';
   for (const nativeApp of id === 'yandex' || id === 'spotify' ? [true, false] : [false]) {
@@ -95,6 +98,7 @@ function update(next) {
   $('interaction-key').textContent = LibertyShortcuts.format(state.shortcuts.bindings.toggleInteraction);
   $('connection-status').textContent = state.connected ? sourceName(state.source) : 'Ожидание плеера'; $('connection-dot').parentElement.classList.toggle('connected', state.connected);
   $('track-title').textContent = state.connected ? state.title || 'Без названия' : 'Включите музыку'; $('track-artist').textContent = state.connected ? state.artist || 'Неизвестный исполнитель' : 'Откройте свой плеер или музыкальную вкладку'; $('track-source').textContent = state.connected ? sourceName(state.source) : '';
+  $('track-source').title = $('track-source').textContent;
   $('playing-label').textContent = state.demo ? 'ДЕМО · ПРЕДПРОСМОТР' : state.connected ? state.playing ? 'СЕЙЧАС ИГРАЕТ' : 'НА ПАУЗЕ' : 'ВАША МУЗЫКА';
   const artwork = state.artwork || (state.demo ? '../renderer/demo-cover.svg' : '');
   if (currentArtwork !== artwork) { currentArtwork = artwork; $('artwork').hidden = !artwork; $('cover-placeholder').hidden = !!artwork; if (artwork) $('artwork').src = artwork; else $('artwork').removeAttribute('src'); }

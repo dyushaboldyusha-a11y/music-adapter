@@ -12,13 +12,17 @@ function update(next) {
   if (state.source?.id !== next.source?.id || !next.interaction) { clearTimeout(volumeTimer); volumeEditing = false; }
   state = next; playbackClock.update(next); paintVoice();
   document.body.classList.toggle('compact', state.compact === true);
+  const times = document.querySelector('.times'), timeline = document.querySelector('.timeline'), footer = document.querySelector('.widget-footer');
+  if (state.compact && times.parentElement !== footer) footer.insertBefore(times, $('demo-label'));
+  else if (!state.compact && times.parentElement !== timeline) timeline.append(times);
   document.body.classList.toggle('has-rhythm-bars', state.preferences?.rhythmBars === true);
   audioWave.update(state.preferences, { visible: !state.autoHidden, source: state.source?.id, playing: state.connected && state.playing && !state.muted });
   LibertyTheme.apply(state.effectiveColor || state.preferences?.color || LibertyTheme.DEFAULT_COLOR, state.preferences?.surfaceColor);
   document.body.classList.toggle('auto-hidden', state.autoHidden === true);
   for (const [key, className] of [['showArtwork', 'no-artwork'], ['showArtist', 'no-artist'], ['showTime', 'no-time']]) document.body.classList.toggle(className, state.preferences?.[key] === false);
   document.querySelector('.signature').textContent = state.preferences?.nickname || 'Liberty';
-  document.documentElement.style.setProperty('--decoration-opacity', String(state.preferences?.opacity ?? 1));
+  const opacity = state.preferences?.opacity ?? 1;
+  document.documentElement.style.setProperty('--decoration-opacity', String(opacity));
   document.body.classList.toggle('locked', !state.interaction);
   document.body.classList.toggle('connected', !!state.connected);
   $('widget').inert = !state.interaction || state.autoHidden;
@@ -45,6 +49,8 @@ function update(next) {
     $(id).disabled = !state.connected || !capability[key];
     if (id !== 'seek') $(id).hidden = $(id).disabled;
   }
+  document.querySelector('.controls').hidden = !state.connected || !['playPause', 'previous', 'next', 'shuffle', 'repeat'].some(key => capability[key]);
+  timeline.hidden = times.hidden = !state.connected;
   $('volume-controls').hidden = !state.connected || !capability.volume || !Number.isFinite(state.volume);
   $('volume').disabled = !capability.volume;
   $('mute').hidden = !capability.mute;

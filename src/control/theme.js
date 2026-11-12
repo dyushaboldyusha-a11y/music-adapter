@@ -12,6 +12,7 @@
     function render() {
       draft[selected] = api.fromHsv(hsv); invalid = false; preview();
       $('color-hex').value = draft[selected]; $('brightness').value = Math.round(hsv.v * 100); $('brightness-value').textContent = `${$('brightness').value}%`;
+      $('brightness').style.setProperty('--progress', `${$('brightness').value}%`);
       const angle = hsv.h * Math.PI / 180;
       $('wheel-marker').style.left = `${50 + Math.cos(angle) * hsv.s * 48}%`; $('wheel-marker').style.top = `${50 + Math.sin(angle) * hsv.s * 48}%`;
       $('wheel-marker').style.backgroundColor = draft[selected];

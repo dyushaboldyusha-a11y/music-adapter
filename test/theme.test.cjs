@@ -40,6 +40,17 @@ test('glass surfaces preserve the chosen hue and produce readable text in light,
   assert.equal(palette('#ffffff').appearance, 'light');
   for (const value of ['red', '#fff', null, NaN, {}, 'url(file:///private)']) assert.throws(() => palette(value));
 });
+test('error messages remain readable on gray and saturated glass palettes', () => {
+  const grays = Array.from({ length: 256 }, (_, value) => '#' + value.toString(16).padStart(2, '0').repeat(3));
+  for (const color of [...grays, '#f700d0', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff']) {
+    const tokens = palette(color).tokens;
+    const rgb = /rgba\((\d+), (\d+), (\d+),/.exec(tokens['--glass-panel']);
+    const panel = '#' + rgb.slice(1).map(value => Number(value).toString(16).padStart(2, '0')).join('');
+    for (const background of [tokens['--app-bg'], panel]) {
+      assert.ok(contrast(tokens['--error-ink'], background) >= 4.5, `${color}: error text must remain readable on ${background}`);
+    }
+  }
+});
 test('surface palette migrates independently of existing accents and round-trips through portable settings', () => {
   assert.equal(preferences({ color: '#438bff' }).surfaceColor, DEFAULT_SURFACE_COLOR);
   assert.equal(preferences({ surfaceColor: '#203040' }).color, '#ff3045');

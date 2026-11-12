@@ -54,6 +54,7 @@
       '--glass-border': light ? 'rgba(255, 255, 255, .78)' : 'rgba(255, 255, 255, .16)',
       '--glass-highlight': light ? 'rgba(255, 255, 255, .88)' : 'rgba(255, 255, 255, .12)',
       '--text': text, '--ink': text, '--muted': muted,
+      '--error-ink': readable(light ? '#a51c32' : '#ffb6c2', [app, panel], strongest),
       '--track-bg': rgba(text, light ? .13 : .18),
       '--shadow-color': light ? 'rgba(25, 35, 52, .13)' : 'rgba(0, 0, 0, .34)',
       '--bg': app, '--card': rgba(panel, .9),

@@ -43,6 +43,10 @@ jobs:
         run: npm run test:glass
       - name: Check panel seams and fitted wave in Windows Electron
         run: npm run test:glass-fixes
+      - name: Check audited application and extension visuals
+        run: npm run test:visual-audit
+      - name: Check widget contrast and compact footer
+        run: npm run test:widget-visual
       - name: Check Windows integrations
         shell: pwsh
         run: |
@@ -118,6 +122,8 @@ jobs:
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:playback
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:glass
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:glass-fixes
+      - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:visual-audit
+      - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:widget-visual
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:wave-fixes
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:music-effects
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:personalization

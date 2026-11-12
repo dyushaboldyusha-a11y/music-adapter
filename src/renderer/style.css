@@ -22,14 +22,14 @@ body.auto-hidden { opacity: 0; pointer-events: none; }
 [hidden] { display: none !important; }
 button, input { font: inherit; -webkit-app-region: no-drag; }
 button { -webkit-tap-highlight-color: transparent; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--red); outline-offset: 3px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-ink,var(--red)); outline-offset: 3px; }
 .icon-library { position: absolute; width: 0; height: 0; overflow: hidden; }
 svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 
 /* The glass layer is separate from the controls so reduced decoration opacity
    never reduces legibility or the hit targets of the player. */
-.widget { position: relative; isolation: isolate; display: flex; align-items: center; gap: 22px; width: 100%; height: 202px; padding: 20px 22px; border: 1px solid transparent; border-radius: 28px; }
-.widget-surface { position: absolute; z-index: -1; inset: -1px; pointer-events: none; border-radius: inherit; border: 1px solid var(--glass-border); background: linear-gradient(135deg, color-mix(in srgb, var(--glass-highlight) 36%, transparent), transparent 48%), var(--glass-bg); box-shadow: 0 9px 17px var(--shadow-color), inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 color-mix(in srgb, var(--ink) 5%, transparent); backdrop-filter: blur(24px) saturate(135%); opacity: var(--decoration-opacity, 1); }
+.widget { position: relative; isolation: isolate; display: flex; align-items: center; gap: 22px; width: 100%; height: 202px; padding: 20px 22px; border: 1px solid transparent; border-radius: 28px; background: var(--glass-bg); }
+.widget-surface { position: absolute; z-index: -1; inset: -1px; pointer-events: none; border-radius: inherit; border: 1px solid var(--glass-border); background: linear-gradient(135deg, color-mix(in srgb, var(--glass-highlight) 36%, transparent), transparent 48%); box-shadow: 0 9px 17px var(--shadow-color), inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 color-mix(in srgb, var(--ink) 5%, transparent); backdrop-filter: blur(24px) saturate(135%); opacity: var(--decoration-opacity, 1); }
 .drag-surface { position: absolute; inset: 0; border-radius: inherit; -webkit-app-region: drag; }
 .edge-waves { position: absolute; inset: -13px; width: calc(100% + 26px); height: calc(100% + 26px); overflow: hidden; pointer-events: none; stroke: none; z-index: -1; opacity: var(--decoration-opacity, 1); }
 .edge-waves use { fill: none; stroke: var(--red); vector-effect: non-scaling-stroke; }
@@ -43,6 +43,7 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 .cover-placeholder svg { width: 38px; height: 38px; stroke-width: 1.35; }
 .signature { display: block; max-width: 100%; margin-top: 11px; overflow: hidden; text-overflow: ellipsis; text-align: center; color: var(--muted); font-size: 10px; line-height: 14px; letter-spacing: 1.3px; font-weight: 600; }
 .player { position: relative; flex: 1; min-width: 0; height: 160px; display: grid; grid-template-rows: 46px 34px 52px 22px; row-gap: 2px; pointer-events: none; }
+body:not(.connected) .player { grid-template-rows: 46px; align-content: center; }
 .track-row { display: flex; align-items: flex-start; gap: 10px; height: 46px; }
 .track-info { flex: 1; min-width: 0; padding-top: 0; -webkit-app-region: drag; pointer-events: auto; cursor: grab; }
 h1 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 21px; font-weight: 650; line-height: 26px; letter-spacing: -.5px; }
@@ -85,7 +86,7 @@ body:not(.locked) .play-button:active:enabled { transform: scale(.94); }
 .volume-row input::-webkit-slider-thumb { width: 8px; height: 8px; margin-top: -2px; }
 .volume-row output { min-width: 30px; font-size: 10px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 
-.widget-footer { display: flex; justify-content: flex-end; align-items: center; height: 36px; padding: 9px 7px 0; gap: 9px; -webkit-app-region: no-drag; }
+.widget-footer { display: flex; justify-content: flex-end; align-items: center; height: 28px; margin-top: 8px; padding: 3px 7px; gap: 9px; border: 1px solid var(--glass-border); border-radius: 10px; background: var(--glass-bg); box-shadow: inset 0 1px var(--glass-highlight),0 2px 5px var(--shadow-color); backdrop-filter: blur(16px); -webkit-app-region: no-drag; }
 .source-status { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 1; color: var(--muted); font-size: 10px; }
 #source-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .source-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: var(--muted); }
@@ -119,8 +120,7 @@ body.compact h1 { font-size: 13px; font-weight: 650; line-height: 17px; letter-s
 body.compact .track-info p { margin-top: 1px; font-size: 10px; line-height: 14px; }
 body.compact .timeline { grid-column: 1; grid-row: 2; }
 body.compact .times, body.compact #shuffle, body.compact #repeat { display: none; }
-body.compact:not(.no-time) .times { display: flex; position: fixed; left: calc(50% - 32px); bottom: 21px; gap: 8px; margin: 0; font-size: 9px; line-height: 12px; pointer-events: none; }
-body.compact:not(.no-time) .source-status { max-width: calc(50% - 70px); }
+body.compact:not(.no-time) .times { display: flex; flex-shrink: 0; gap: 8px; margin: 0; font-size: 9px; line-height: 12px; pointer-events: none; }
 body.compact .timeline input::-webkit-slider-runnable-track { height: 3px; }
 body.compact .timeline input::-webkit-slider-thumb { width: 8px; height: 8px; margin-top: -2.5px; }
 body.compact .controls { grid-column: 2; grid-row: 1; grid-template-columns: 28px 36px 28px; gap: 4px; height: 34px; padding: 0 4px; border-radius: 14px; }
@@ -133,7 +133,8 @@ body.compact .volume-row { grid-column: 2; grid-row: 2; gap: 5px; height: 16px; 
 body.compact .volume-row .icon-button { width: 17px; height: 16px; }
 body.compact .volume-row input { width: 84px; height: 16px; }
 body.compact .volume-row output { display: none; }
-body.compact .widget-footer { height: 28px; padding-top: 6px; }
+body.compact .widget-footer { height: 22px; margin-top: 6px; padding: 1px 7px; gap: 8px; border-radius: 8px; }
+body.compact:not(.connected) .player { grid-template-columns: minmax(0,1fr); grid-template-rows: 34px; align-content: center; }
 body.compact #key-hint, body.compact .mode-hint svg { display: none; }
 body.compact .more { margin-top: 1px; width: 22px; height: 25px; border-radius: 8px; }
 
