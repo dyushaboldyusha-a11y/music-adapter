@@ -5,6 +5,7 @@ const os = require('node:os');
 const { randomUUID } = require('node:crypto');
 const { PlaybackClock } = require('./renderer/playback-clock.js');
 const { artworkUrl } = require('./artwork-url.cjs');
+const { lookupCover } = require('./discord-artwork.cjs');
 const DEFAULT_DISCORD_APPLICATION_ID = '1568620348604162058';
 
 const text = (value, length = 128) => Array.from(String(value || '').replace(/[\p{C}]/gu, ' ').trim()).slice(0, length).join('');
@@ -31,15 +32,21 @@ function activityFor(state, { now = Date.now(), position = state?.position || 0,
   return activity;
 }
 const trackKey = state => JSON.stringify([state?.source?.id, state?.title, state?.artist, state?.album]);
-const canonical = value => String(value || '').normalize('NFKC').toLocaleLowerCase('en-US').replace(/[^\p{L}\p{N}]/gu, '');
 
 class DiscordPresence extends EventEmitter {
-  constructor({ connect = name => net.createConnection(name), fetch = globalThis.fetch, retryMs = 15000, throttleMs = 15000, timeoutMs = 3000, emptyGraceMs = 2500, now = () => Date.now() } = {}) {
+  constructor({ connect = name => net.createConnection(name), fetch = globalThis.fetch, retryMs = 15000, throttleMs = 15000, timeoutMs = 3000, emptyGraceMs = 2500, coverWaitMs = 4000, coverTtlMs = 3600000, coverMissTtlMs = 300000, coverRetryMs = 30000, now = () => Date.now() } = {}) {
     super(); this.connect = connect; this.fetch = fetch; this.retryMs = retryMs; this.throttleMs = throttleMs; this.timeoutMs = timeoutMs; this.now = now; this.emptyGraceMs = emptyGraceMs; this.emptySince = null;
+    this.coverWaitMs = coverWaitMs; this.coverTtlMs = coverTtlMs; this.coverMissTtlMs = coverMissTtlMs; this.coverRetryMs = coverRetryMs; this.coverPending = false;
     this.enabled = false; this.applicationId = DEFAULT_DISCORD_APPLICATION_ID; this.phase = 'off'; this.error = ''; this.epoch = 0; this.state = null; this.clock = new PlaybackClock(); this.covers = new Map(); this.cover = null; this.coverKey = ''; this.lastSentAt = -Infinity;
   }
   snapshot() { return { enabled: this.enabled, applicationId: this.applicationId, phase: this.phase, error: this.error }; }
   status(phase, error = '') { if (this.phase === phase && this.error === error) return; this.phase = phase; this.error = error; this.emit('state', this.snapshot()); }
+  rememberCover(key, cover, ttl) {
+    if (this.covers.size >= 64 && !this.covers.has(key)) this.covers.delete(this.covers.keys().next().value);
+    this.covers.set(key, { cover, expiresAt: this.now() + ttl }); this.cover = cover;
+    clearTimeout(this.coverRetry);
+    this.coverRetry = setTimeout(() => { this.resolveCover(); this.flush(); }, ttl); this.coverRetry.unref?.();
+  }
   configure({ enabled = false, applicationId = DEFAULT_DISCORD_APPLICATION_ID } = {}) {
     let id = ''; try { id = clientId(applicationId); } catch {}
     if (this.enabled === enabled && this.applicationId === id) return;
@@ -50,29 +57,39 @@ class DiscordPresence extends EventEmitter {
   }
   update(state) { if (state?.connected && state.title?.trim()) this.emptySince = null; this.state = state; this.clock.update(state); if (this.enabled && this.applicationId) { this.resolveCover(); this.flush(); } }
   async resolveCover() {
-    const state = this.state, key = trackKey(state);
-    if (key === this.coverKey) return;
-    this.coverKey = key; this.cover = null; this.coverRequest?.abort();
-    if (!state?.connected || !state.title || !state.artist || artworkUrl(state.artworkUrl)) return;
-    if (this.covers.has(key)) { this.cover = this.covers.get(key); return; }
-    const controller = new AbortController(); this.coverRequest = controller;
-    const timeout = setTimeout(() => controller.abort(), 4000); timeout.unref?.();
+    if (!this.enabled || !this.applicationId) return;
+    const state = this.state, key = trackKey(state), direct = artworkUrl(state?.artworkUrl);
+    const sameTrack = state?.connected === true && this.coverTrack === key;
+    const identity = JSON.stringify([key, state?.connected === true, direct]);
+    const changed = identity !== this.coverKey;
+    if (changed) {
+      this.coverRequest?.abort(); this.coverRequest = null; this.coverPending = false;
+      clearTimeout(this.coverRetry); this.coverKey = identity; if (!sameTrack) this.cover = null;
+      this.coverTrack = state?.connected === true ? key : '';
+      this.coverWaitUntil = this.now() + this.coverWaitMs;
+    }
+    if (!state?.connected || !state.title?.trim() || !state.artist?.trim()) return;
+    if (direct) { this.cover = direct; return; }
+    if (this.coverPending) return;
+    const cached = this.covers.get(key);
+    if (cached && cached.expiresAt > this.now()) {
+      this.cover = cached.cover || this.cover;
+      clearTimeout(this.coverRetry); this.coverRetry = setTimeout(() => { this.resolveCover(); this.flush(); }, cached.expiresAt - this.now()); this.coverRetry.unref?.(); return;
+    }
+    const controller = new AbortController(); this.coverRequest = controller; this.coverPending = true;
+    const timeout = setTimeout(() => { controller.abort(); if (this.coverRequest === controller) this.flush(); }, this.coverWaitMs); timeout.unref?.();
     try {
-      const url = new URL('https://itunes.apple.com/search');
-      url.search = new URLSearchParams({ term: `${state.artist} ${state.title}`, entity: 'song', limit: '5' }).toString();
-      const response = await this.fetch(url.href, { signal: controller.signal });
-      if (!response.ok || Number(response.headers.get('content-length')) > 131072) return;
-      let size = 0; const chunks = [];
-      for await (const chunk of response.body) { size += chunk.length; if (size > 131072) { controller.abort(); return; } chunks.push(chunk); }
-      const results = JSON.parse(Buffer.concat(chunks).toString('utf8')).results;
-      const found = Array.isArray(results) && results.find(item => canonical(item.trackName) === canonical(state.title) && canonical(item.artistName) === canonical(state.artist) && (!state.album || canonical(item.collectionName) === canonical(state.album)));
-      const cover = found ? artworkUrl(found.artworkUrl100?.replace(/100x100bb(?=\.)/, '512x512bb')) : null;
-      if (controller.signal.aborted) return;
-      if (this.covers.size >= 64) this.covers.delete(this.covers.keys().next().value);
-      this.covers.set(key, cover);
-      if (this.coverKey === key && this.enabled) { this.cover = cover; this.flush(); }
-    } catch { /* Cover lookup must never interrupt playback or the text status. */ }
-    finally { clearTimeout(timeout); }
+      const result = await lookupCover(state, { fetch: this.fetch, signal: controller.signal });
+      if (this.coverRequest !== controller || !this.enabled) return;
+      const found = controller.signal.aborted ? null : result.cover;
+      const ttl = found ? this.coverTtlMs : result.transient || controller.signal.aborted ? this.coverRetryMs : this.coverMissTtlMs;
+      // A refresh failure for this exact track must not discard its already
+      // verified artwork. Track/source changes clear it before lookup.
+      this.rememberCover(key, found || this.cover, ttl);
+    } catch {
+      if (this.coverRequest === controller && this.enabled) this.rememberCover(key, this.cover, this.coverRetryMs);
+    }
+    finally { clearTimeout(timeout); if (this.coverRequest === controller) { this.coverRequest = null; this.coverPending = false; this.flush(); } }
   }
   open(index, epoch) {
     if (!this.enabled || !this.applicationId || epoch !== this.epoch) return;
@@ -125,6 +142,12 @@ class DiscordPresence extends EventEmitter {
   }
   flush() {
     if (!this.enabled || !this.ready || !this.socket || this.pending) return;
+    // Resolve the replacement track's artwork before publishing its title. The
+    // previous activity can remain briefly, but its cover must never be attached
+    // to another song. A slow/unavailable catalog cannot hide music forever.
+    if (this.coverPending && !this.cover && !artworkUrl(this.state?.artworkUrl) && this.now() < this.coverWaitUntil) {
+      clearTimeout(this.flushTimer); this.flushTimer = setTimeout(() => this.flush(), this.coverWaitUntil - this.now()); this.flushTimer.unref?.(); return;
+    }
     const activity = activityFor(this.state, { now: this.now(), position: this.clock.position(), cover: this.cover });
     // Players briefly publish an empty session between tracks. Keep the last
     // activity until metadata returns, but still clear a genuinely closed player.
@@ -146,7 +169,7 @@ class DiscordPresence extends EventEmitter {
     this.ackTimer = setTimeout(() => { this.socket?.destroy(); }, this.timeoutMs); this.ackTimer.unref?.();
   }
   disconnect() {
-    this.epoch++; clearTimeout(this.retry); clearTimeout(this.connectionTimer); clearTimeout(this.ackTimer); clearTimeout(this.flushTimer); this.coverRequest?.abort(); this.coverKey = ''; this.emptySince = null;
+    this.epoch++; clearTimeout(this.retry); clearTimeout(this.connectionTimer); clearTimeout(this.ackTimer); clearTimeout(this.flushTimer); clearTimeout(this.coverRetry); this.coverRequest?.abort(); this.coverRequest = null; this.coverPending = false; this.cover = null; this.coverTrack = ''; this.coverKey = ''; this.emptySince = null;
     const socket = this.socket;
     if (socket && this.ready && !socket.destroyed) socket.end(frame(1, { cmd: 'SET_ACTIVITY', args: { pid: process.pid, activity: null }, nonce: randomUUID() }));
     else socket?.destroy();

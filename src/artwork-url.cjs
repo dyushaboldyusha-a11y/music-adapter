@@ -3,7 +3,7 @@ function artworkUrl(value) {
   if (typeof value !== 'string' || value.length > 256) return null;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password && !url.port && COVER_HOSTS.some(host => url.hostname === host || url.hostname.endsWith('.' + host)) ? url.href : null;
+    return url.href.length <= 256 && url.protocol === 'https:' && !url.username && !url.password && !url.port && COVER_HOSTS.some(host => url.hostname === host || url.hostname.endsWith('.' + host)) ? url.href : null;
   } catch { return null; }
 }
 module.exports = { artworkUrl };

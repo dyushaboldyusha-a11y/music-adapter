@@ -8,6 +8,7 @@
     <h3 class="section-title">Перенос настроек</h3><div class="card personal-card"><p class="description">Сохраните оформление, никнейм, бинды и положения виджета в JSON. Подключения браузеров в файл не включаются.</p><div class="button-row"><button id="settings-export">Экспорт настроек</button><button id="settings-import">Импорт настроек</button></div><p id="transfer-status" class="footnote" role="status"></p></div>`;
     $('page-home').append(home);
     const appearance = document.createElement('div');
+    appearance.className = 'appearance-options';
     appearance.innerHTML = `<div class="card settings-list"><label class="setting-row color-source-row"><select id="color-mode" aria-label="Источник акцента"><option value="manual">Моя палитра</option><option value="artwork">Акцент из обложки</option></select></label></div><h3 class="section-title">Конструктор виджета</h3><div class="card settings-list"><label class="setting-row"><span><strong>Обложка</strong></span><input id="show-artwork" type="checkbox" class="switch"></label><label class="setting-row"><span><strong>Исполнитель</strong></span><input id="show-artist" type="checkbox" class="switch"></label><label class="setting-row"><span><strong>Время трека</strong></span><input id="show-time" type="checkbox" class="switch"></label></div>`;
     const palette = $('page-appearance').querySelector('.palette-card');
     $('page-appearance').insertBefore(appearance, palette.nextSibling);

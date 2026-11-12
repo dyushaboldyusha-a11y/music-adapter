@@ -1,10 +1,55 @@
 (function (root) {
   const { MusicDynamics } = typeof module !== 'undefined' ? require('./music-dynamics.js') : root.LibertyMusicDynamics;
-  function ring(w, h, time, level, intensity) {
-    const amplitude = Math.max(0, Math.min(1, level)) * Math.max(0, Math.min(1, intensity)) * 6;
-    const a = Math.sin(time * 2.1) * amplitude, b = Math.cos(time * 1.7) * amplitude;
-    const n = value => Number(value.toFixed(2));
-    return `M36 ${n(9 + a)}C${n(w * .2)} ${n(9 - b)} ${n(w * .3)} ${n(9 + b)} ${n(w * .5)} 9S${n(w * .8)} ${n(9 - a)} ${w - 36} 9Q${w - 8} 7 ${w - 9} 36C${n(w - 9 + b)} ${n(h * .4)} ${n(w - 9 - a)} ${n(h * .6)} ${w - 9} ${h - 36}Q${w - 7} ${h - 7} ${w - 36} ${h - 9}C${n(w * .8)} ${n(h - 9 - b)} ${n(w * .7)} ${n(h - 9 + a)} ${n(w * .5)} ${h - 9}S${n(w * .2)} ${n(h - 9 + b)} 36 ${h - 9}Q7 ${h - 7} 9 ${h - 36}C${n(9 - a)} ${n(h * .6)} ${n(9 + b)} ${n(h * .4)} 9 36Q5 6 36 ${n(9 + a)}Z`;
+  function ring(w, h, time, level, intensity, geometry = {}) {
+    const unit = value => Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+    const number = (value, fallback) => Number.isFinite(value) ? value : fallback;
+    w = Math.max(0, number(w, 0)); h = Math.max(0, number(h, 0));
+    const inset = Math.min(12, Math.max(0, w / 2), Math.max(0, h / 2));
+    const x = number(geometry.x, inset), y = number(geometry.y, inset);
+    const width = Math.max(0, number(geometry.width, w - inset * 2));
+    const height = Math.max(0, number(geometry.height, h - inset * 2));
+    const radius = Math.max(0, Math.min(number(geometry.radius, 28), width / 2, height / 2));
+    const gap = Math.max(0, number(geometry.gap, 2)), outerRadius = radius + gap;
+    const amplitude = unit(level) * unit(intensity) * 3, phase = number(time, 0) * 2.1;
+    const n = value => Number(value.toFixed(3)), point = p => `${n(p[0])} ${n(p[1])}`;
+    const commands = [`M${point([x + radius, y - gap])}`];
+    const cubic = (a, b, end) => commands.push(`C${point(a)} ${point(b)} ${point(end)}`);
+
+    // Wave only the straight sides. A zero slope at each end joins the
+    // concentric corner arcs without changing their radius or tangent.
+    function side(start, end, normal, sidePhase) {
+      const segments = 8, step = 1 / segments, delta = [end[0] - start[0], end[1] - start[1]];
+      function sample(u) {
+        const sine = Math.sin(Math.PI * u), angle = phase + sidePhase + Math.PI * 2 * u;
+        const envelope = sine * sine, carrier = .55 + .45 * Math.sin(angle);
+        const offset = u === 0 || u === 1 ? 0 : amplitude * envelope * carrier;
+        const slope = amplitude * (Math.PI * 2 * sine * Math.cos(Math.PI * u) * carrier + envelope * .45 * Math.PI * 2 * Math.cos(angle));
+        // Keep both Bezier handles in the outward strip, including near the
+        // endpoints where unrestricted interpolation could cross the card.
+        const limit = 3 * Math.max(0, Math.min(offset, amplitude - offset)) / step;
+        const derivative = Math.max(-limit, Math.min(limit, slope));
+        return {
+          p: [start[0] + delta[0] * u + normal[0] * offset, start[1] + delta[1] * u + normal[1] * offset],
+          d: [delta[0] + normal[0] * derivative, delta[1] + normal[1] * derivative]
+        };
+      }
+      let a = sample(0);
+      for (let i = 1; i <= segments; i++) {
+        const b = sample(i / segments);
+        cubic(a.p.map((value, axis) => value + a.d[axis] * step / 3), b.p.map((value, axis) => value - b.d[axis] * step / 3), b.p);
+        a = b;
+      }
+    }
+    const right = x + width, bottom = y + height, handle = outerRadius * 4 * (Math.SQRT2 - 1) / 3;
+    side([x + radius, y - gap], [right - radius, y - gap], [0, -1], 0);
+    cubic([right - radius + handle, y - gap], [right + gap, y + radius - handle], [right + gap, y + radius]);
+    side([right + gap, y + radius], [right + gap, bottom - radius], [1, 0], 1.7);
+    cubic([right + gap, bottom - radius + handle], [right - radius + handle, bottom + gap], [right - radius, bottom + gap]);
+    side([right - radius, bottom + gap], [x + radius, bottom + gap], [0, 1], 3.2);
+    cubic([x + radius - handle, bottom + gap], [x - gap, bottom - radius + handle], [x - gap, bottom - radius]);
+    side([x - gap, bottom - radius], [x - gap, y + radius], [-1, 0], 4.9);
+    cubic([x - gap, y + radius - handle], [x + radius - handle, y - gap], [x + radius, y - gap]);
+    return `${commands.join('')}Z`;
   }
   function create() {
     const svg = document.querySelector('.edge-waves'), path = document.getElementById('edge-wave-ring');
@@ -13,7 +58,7 @@
     const cover = document.getElementById('cover'), beatFrame = document.querySelector('.beat-frame'), rhythm = document.querySelector('.music-rhythm');
     const bars = Array.from({ length: 16 }, () => { const bar = document.createElement('i'); rhythm.append(bar); return bar; });
     const dynamics = new MusicDynamics(), barValues = Array(16).fill(0);
-    let preferences = {}, source, energy = 0, music = 0, beat = 0, timer, visible = true, playing = true, phase = 0, width = 616, height = 234, previous, lastFrame = performance.now();
+    let preferences = {}, source, energy = 0, music = 0, beat = 0, timer, visible = true, playing = true, phase = 0, width = 616, height = 234, geometry, previous, lastFrame = performance.now();
     const reduced = matchMedia('(prefers-reduced-motion: reduce)');
     const smooth = (value, target, elapsed, attack, release) => {
       const next = value + (target - value) * (1 - Math.exp(-elapsed / (target > value ? attack : release)));
@@ -26,12 +71,19 @@
       bars.forEach(bar => { bar.style.transform = 'scaleY(0)'; });
     }
     function size() {
-      const widget = document.getElementById('widget'); width = widget.clientWidth + 34; height = widget.clientHeight + 34;
+      const widget = document.getElementById('widget'), bounds = widget.getBoundingClientRect(), viewport = svg.getBoundingClientRect();
+      // A disabled wave has display:none. Preserve valid geometry until it is
+      // visible again, rather than replacing the viewBox with a zero size.
+      if (!viewport.width || !viewport.height) return;
+      const next = { x: bounds.left - viewport.left, y: bounds.top - viewport.top, width: bounds.width, height: bounds.height, radius: parseFloat(getComputedStyle(widget).borderTopLeftRadius) || 0 };
+      if (width === viewport.width && height === viewport.height && geometry && Object.keys(next).every(key => geometry[key] === next[key])) return;
+      width = viewport.width; height = viewport.height;
+      geometry = next;
       svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
       mask.setAttribute('width', width); mask.setAttribute('height', height);
       rectangles[0].setAttribute('width', width); rectangles[0].setAttribute('height', height);
-      rectangles[1].setAttribute('width', width - 32); rectangles[1].setAttribute('height', height - 32);
-      rectangles[1].setAttribute('rx', parseFloat(getComputedStyle(widget).borderTopLeftRadius) || 19);
+      for (const key of ['x', 'y', 'width', 'height']) rectangles[1].setAttribute(key, geometry[key]);
+      rectangles[1].setAttribute('rx', geometry.radius); rectangles[1].setAttribute('ry', geometry.radius);
       previous = null;
     }
     function frame() {
@@ -46,12 +98,14 @@
       const target = disabled || mode === 'off' ? 0 : mode === 'ambient' ? .35 + .15 * Math.sin(now / 1000) : music;
       energy = disabled || mode === 'off' ? 0 : smooth(energy, target, elapsed, .035, .12);
       if (mode === 'ambient' || energy > 0) phase += elapsed * (1 + energy * 4);
-      svg.toggleAttribute('hidden', mode === 'off' || intensity === 0);
-      const d = ring(width, height, phase, energy, intensity);
+      const hidden = mode === 'off' || intensity === 0, wasHidden = svg.hasAttribute('hidden');
+      svg.toggleAttribute('hidden', hidden);
+      if (!hidden && (wasHidden || !geometry)) size();
+      const d = ring(width, height, phase, energy, intensity, geometry);
       if (d !== previous) { path.setAttribute('d', d); previous = d; }
       property(stroke, 'opacity', String(.35 + energy * intensity * .65));
       property(glow, 'opacity', String(.15 + energy * intensity * .7));
-      property(glow, 'stroke-width', `${3 + energy * intensity * 4}px`);
+      property(glow, 'stroke-width', `${3 + energy * intensity * 2.4}px`);
       property(cover, '--cover-scale', String(1 + (preferences.coverPulse ? music * intensity * .045 : 0)));
       beatFrame.hidden = !preferences.beatGlow || disabled;
       property(beatFrame, '--beat-strength', String(preferences.beatGlow ? beat * intensity : 0));
@@ -68,13 +122,14 @@
       }
       if (!disabled && (mode === 'ambient' || energy > 0 || music > 0 || beat > 0 || barsMoving)) timer = setTimeout(frame, preferences.waveEconomy ? 83 : 33);
     }
+    size();
     new ResizeObserver(() => { size(); frame(); }).observe(document.getElementById('widget'));
     reduced.addEventListener('change', () => { reset(); frame(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(timer); timer = null; } else frame(); });
     return {
       update(value, options = {}) {
         if (source !== options.source || options.visible === false || options.playing === false) reset();
-        source = options.source; preferences = value || {}; visible = options.visible !== false; playing = options.playing !== false; frame();
+        source = options.source; preferences = value || {}; visible = options.visible !== false; playing = options.playing !== false; size(); frame();
       },
       level(value) {
         const interested = (preferences.waveMode || 'audio') === 'audio' || preferences.coverPulse || preferences.rhythmBars || preferences.beatGlow;
