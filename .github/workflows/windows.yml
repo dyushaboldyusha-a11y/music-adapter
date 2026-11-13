@@ -45,6 +45,8 @@ jobs:
         run: npm run test:glass-fixes
       - name: Check audited application and extension visuals
         run: npm run test:visual-audit
+      - name: Check Glass popup, selected colors and live widget preview
+        run: npm run test:glass-polish
       - name: Check widget contrast and compact footer
         run: npm run test:widget-visual
       - name: Check Windows integrations
@@ -123,6 +125,7 @@ jobs:
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:glass
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:glass-fixes
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:visual-audit
+      - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:glass-polish
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:widget-visual
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:wave-fixes
       - run: xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' npm run test:music-effects

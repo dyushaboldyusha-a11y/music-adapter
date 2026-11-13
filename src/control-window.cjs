@@ -65,6 +65,7 @@ class ControlWindow {
     }
     this.window.webContents.send('control:state', state);
   }
+  audioLevel(value) { if (this.window && !this.window.isDestroyed() && this.window.isVisible()) this.window.webContents.send('control:audio-level', value); }
   dispose() { this.quitting = true; this.onBlur(); this.window?.destroy(); this.ipcMain.removeHandler('control:get-state'); this.ipcMain.removeHandler('control:action'); }
 }
 module.exports = { ControlWindow, controlBounds };

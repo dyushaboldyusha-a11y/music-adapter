@@ -23,6 +23,7 @@
     "test:glass": "node scripts/smoke-glass.mjs",
     "test:glass-fixes": "node scripts/smoke-glass-fixes.mjs",
     "test:visual-audit": "node scripts/smoke-visual-audit.mjs",
+    "test:glass-polish": "node scripts/smoke-glass-polish.mjs",
     "test:widget-visual": "node scripts/smoke-widget-visual.mjs",
     "test:control": "node scripts/smoke-control.mjs",
     "test:update-network": "electron scripts/check-update-network.cjs",

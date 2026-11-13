@@ -18,6 +18,7 @@ const VOICE_COMMANDS = require('./shared/voice-commands.json');
 const { AutoHide } = require('./auto-hide.cjs');
 const { watchDisplays } = require('./display-placement.cjs');
 const { BrowserBridge } = require('./browser-bridge.cjs');
+const { extensionTheme } = require('./extension-theme.cjs');
 const { MediaHub } = require('./media-hub.cjs');
 const { PROVIDERS } = require('./sources.cjs');
 const { ShortcutManager } = require('./shortcuts.cjs');
@@ -281,7 +282,10 @@ async function start() {
   // zoom is set at construction so the first renderer frame is scaled too.
   placement.restore();
   setInteraction(interaction);
-  browserBridge = new BrowserBridge({ port: demo ? 0 : 16837, dataFile: path.join(app.getPath('userData'), 'browser-connections.json') });
+  browserBridge = new BrowserBridge({ port: demo ? 0 : 16837, dataFile: path.join(app.getPath('userData'), 'browser-connections.json'), getTheme: () => {
+    const current = effectivePreferences();
+    return extensionTheme(current.colorMode === 'artwork' ? artworkAccent || current.color : current.color, current.surfaceColor);
+  } });
   try { await browserBridge.start(); } catch (error) { console.warn('Browser connector unavailable:', error.code); }
   if (demo) media = new DemoMedia();
   else media = new MediaHub(process.platform === 'win32' ? new WindowsMedia(app.isPackaged ? path.join(process.resourcesPath, 'native/windows-media.ps1') : path.join(__dirname, '../native/windows-media.ps1')) : null, browserBridge);
@@ -316,7 +320,7 @@ async function start() {
   updateTray();
   if (!demo && !process.argv.includes('--widget-only')) await openControls();
 }
-function sendAudioLevel(value) { audioLevel = state.playing ? value : { available: false, level: 0 }; if (window && !window.isDestroyed()) window.webContents.send('widget:audio-level', audioLevel); }
+function sendAudioLevel(value) { audioLevel = state.playing ? value : { available: false, level: 0 }; if (window && !window.isDestroyed()) window.webContents.send('widget:audio-level', audioLevel); controls?.audioLevel(audioLevel); }
 let quitting = false;
 app.on('before-quit', event => {
   if (!quitting) {

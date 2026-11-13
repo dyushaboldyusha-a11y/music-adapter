@@ -1,0 +1,23 @@
+.color-presets button {
+  position: relative;
+  padding: 0;
+}
+.color-presets button::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid var(--swatch-ink);
+  border-bottom: 2px solid var(--swatch-ink);
+  transform: translate(-50%,-50%) rotate(-45deg);
+  opacity: 0;
+  pointer-events: none;
+}
+.color-presets button[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--app-bg),0 0 0 3px var(--accent-ink),0 2px 5px var(--shadow-color);
+}
+.color-presets button[aria-pressed="true"]::after {
+  opacity: 1;
+}

@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id), bridge = window.libertyControl;
 let state, page = 'home', noticeTimer, currentArtwork, sourceKey = '', seeking = false;
 const editingRanges = new Set(), clock = new LibertyPlaybackClock();
+const preview = LibertyWidgetPreview.create();
 const theme = LibertyControlTheme.create(action, () => page === 'appearance');
 const shortcuts = LibertyControlShortcuts.create(action);
 const personalization = LibertyPersonalization.create(action);
@@ -20,6 +21,7 @@ function navigate(next) {
   for (const section of document.querySelectorAll('.page')) section.hidden = section.id !== `page-${page}`;
   for (const button of document.querySelectorAll('nav button')) button.setAttribute('aria-current', button.dataset.page === page ? 'page' : 'false');
   $('content').scrollTop = 0; if (page === 'appearance') theme.render();
+  preview.setActive(page === 'appearance');
 }
 for (const button of document.querySelectorAll('[data-page],[data-go]')) button.addEventListener('click', () => navigate(button.dataset.page || button.dataset.go));
 for (const name of ['minimize', 'maximize', 'close']) $(`window-${name}`).addEventListener('click', () => action('window', name));
@@ -91,7 +93,7 @@ function updateUpdates() {
 function update(next) {
   if (!next) return;
   if (state?.source?.id !== next.source?.id) { seeking = false; editingRanges.delete('volume'); }
-  state = next; document.documentElement.dataset.nativeGlass = String(state.nativeGlass === true); clock.update(state); theme.update(state); shortcuts.update(state); personalization.update(state); automation.update(state); playback.update(state);
+  state = next; document.documentElement.dataset.nativeGlass = String(state.nativeGlass === true); clock.update(state); theme.update(state); shortcuts.update(state); personalization.update(state); automation.update(state); playback.update(state); preview.update(state);
   $('version').textContent = state.version; $('mode-badge').textContent = state.interaction ? 'Управление включено' : 'Закреплён'; $('mode-badge').classList.toggle('editable', state.interaction);
   $('interaction').checked = state.interaction; $('compact').checked = state.preferences.compact;
   $('interaction-description').textContent = state.interaction ? 'Виджет можно перемещать и нажимать его кнопки' : 'Клики проходят сквозь виджет';
@@ -123,3 +125,4 @@ function paint() {
 $('artwork').addEventListener('error', () => { $('artwork').hidden = true; $('cover-placeholder').hidden = false; });
 document.addEventListener('keydown', event => { if (event.key === 'Escape') $('notice').hidden = true; });
 bridge.onState(update); bridge.onNavigate(navigate); bridge.getState().then(update); setInterval(paint, 200);
+bridge.onAudioLevel(level => preview.level(level));

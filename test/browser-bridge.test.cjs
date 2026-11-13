@@ -39,3 +39,28 @@ test('a disconnected extension expires and cannot masquerade as an unsupported s
     assert.equal((await request(bridge, '/v1/sync', { clientId: 'test-client-2', sources: [] }, token)).status, 401);
   } finally { bridge.stop(); }
 });
+
+test('the app palette is shared only after pairing/authentication and updates without exposing settings', async () => {
+  const { extensionTheme } = require('../src/extension-theme.cjs');
+  let current = extensionTheme('#ff3045', '#e8edf3'), calls = 0;
+  const bridge = new BrowserBridge({ port: 0, getTheme: () => { calls++; return { ...current, nickname: 'private', token: 'private', tokens: { ...current.tokens, '--private': 'private' } }; } });
+  await bridge.start();
+  try {
+    const denied = await request(bridge, '/v1/sync', { clientId: 'theme-client', sources: [] });
+    assert.equal(denied.status, 401); assert.equal(calls, 0); assert.equal((await denied.json()).theme, undefined);
+    const wrongPair = await request(bridge, '/v1/pair', { code: 'invalid', clientId: 'theme-client' });
+    assert.equal(wrongPair.status, 401); assert.equal(calls, 0);
+    const pair = bridge.beginPairing();
+    const paired = await (await request(bridge, '/v1/pair', { code: pair.code, clientId: 'theme-client' })).json();
+    assert.ok(paired.token); assert.deepEqual(paired.theme, current); assert.equal(calls, 1);
+    current = extensionTheme('#ffffff', '#f700d0');
+    const next = await (await request(bridge, '/v1/sync', { clientId: 'theme-client', sources: [], preferences: { color: '#000000' }, theme: { tokens: { '--red': '#000000' } } }, paired.token)).json();
+    assert.deepEqual(next.commands, []); assert.deepEqual(next.theme, current);
+    assert.equal(JSON.stringify(next).includes('private'), false); assert.equal(next.theme.tokens['--red'], '#ffffff');
+    const fromWebsite = await request(bridge, '/v1/sync', { clientId: 'theme-client', sources: [] }, paired.token, 'https://attacker.invalid');
+    assert.equal(fromWebsite.status, 403); assert.equal((await fromWebsite.json()).theme, undefined);
+    bridge.getTheme = () => { throw new Error('Appearance provider unavailable'); };
+    const unaffected = await request(bridge, '/v1/sync', { clientId: 'theme-client', sources: [] }, paired.token);
+    assert.equal(unaffected.status, 200); assert.deepEqual(await unaffected.json(), { commands: [] });
+  } finally { bridge.stop(); }
+});

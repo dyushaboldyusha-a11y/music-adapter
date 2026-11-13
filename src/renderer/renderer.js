@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 let state = {}, volumeEditing = false, volumeTimer, volumeSource, seeking = false, currentArtwork;
 const playbackClock = new LibertyPlaybackClock();
-const bridge = window.musicWidget;
+const bridge = window.libertyPreviewBridge || window.musicWidget;
 const audioWave = LibertyAudioWave.create();
 bridge.onAudioLevel(level => audioWave.level(level));
 const formatTime = value => { const total = Math.floor(Math.max(0, value || 0)); return total >= 3600 ? `${Math.floor(total / 3600)}:${String(Math.floor(total / 60) % 60).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}` : `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; };

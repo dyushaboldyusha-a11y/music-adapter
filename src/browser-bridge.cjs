@@ -5,12 +5,13 @@ const { EventEmitter } = require('node:events');
 const { normalizeState, validateCommand } = require('./media.cjs');
 const { descriptor } = require('./sources.cjs');
 const { fromUrl } = require('../browser-extension/services.js');
+const { publicTheme } = require('./extension-theme.cjs');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const extensionOrigin = origin => !origin || /^(chrome-extension:\/\/[a-p]{32}|moz-extension:\/\/[a-f0-9-]{36})$/.test(origin);
 
 class BrowserBridge extends EventEmitter {
-  constructor({ port = 16837, dataFile } = {}) {
-    super(); this.port = port; this.dataFile = dataFile; this.clients = new Map(); this.players = new Map(); this.pending = new Map(); this.available = false; this.failedPairings = []; this.nextId = 0;
+  constructor({ port = 16837, dataFile, getTheme = () => null } = {}) {
+    super(); this.port = port; this.dataFile = dataFile; this.getTheme = getTheme; this.clients = new Map(); this.players = new Map(); this.pending = new Map(); this.available = false; this.failedPairings = []; this.nextId = 0;
     try { for (const c of JSON.parse(fs.readFileSync(dataFile, 'utf8'))) if (typeof c.id === 'string' && /^[a-f0-9]{64}$/.test(c.hash)) this.clients.set(c.id, { ...c, queue: [] }); } catch {}
   }
   async start() {
@@ -26,6 +27,7 @@ class BrowserBridge extends EventEmitter {
     return { ...this.pairing };
   }
   sources() { return [...this.players.values()].map(p => p.state); }
+  themeFields() { try { const theme = publicTheme(this.getTheme()); return theme ? { theme } : {}; } catch { return {}; } }
   persist() { if (this.dataFile) fs.writeFileSync(this.dataFile, JSON.stringify([...this.clients.values()].map(({ id, hash, name }) => ({ id, hash, name }))), { mode: 0o600 }); }
   expire() {
     let changed = false;
@@ -54,7 +56,7 @@ class BrowserBridge extends EventEmitter {
         if (this.clients.size >= 8 && !this.clients.has(body.clientId)) return send(409, { error: 'Отключите старые браузеры в разделе «Источники» Liberty Wave' });
         this.clients.set(body.clientId, { id: body.clientId, hash: hash(token), name: String(body.browser || 'Browser').slice(0, 40), queue: [] });
         this.pairing = null; this.persist();
-        return send(200, { token });
+        return send(200, { token, ...this.themeFields() });
       }
       const client = this.clients.get(body.clientId);
       const tokenHash = hash(String(request.headers.authorization || '').replace(/^Bearer /, ''));
@@ -84,7 +86,7 @@ class BrowserBridge extends EventEmitter {
       }
       const commands = client.queue.splice(0).filter(c => this.pending.has(c.id));
       this.emit('change');
-      return send(200, { commands });
+      return send(200, { commands, ...this.themeFields() });
     } catch (error) { if (!response.headersSent) send(500, { error: 'Browser bridge error' }); }
   }
   command(id, command, value) {

@@ -31,6 +31,10 @@ try {
   while (!(control = app.windows().find(page => page.url().endsWith('/control/index.html')))) await new Promise(resolve => setTimeout(resolve, 50));
   await control.waitForFunction(() => !!window.libertyControl);
   await control.waitForFunction(() => document.visibilityState === 'visible', null, { polling: 50, timeout: 10000 });
+  await app.evaluate(async ({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().endsWith('/control/index.html'));
+    if (!window.isVisible()) await new Promise(resolve => window.once('show', resolve));
+  });
   await app.evaluate(({ BrowserWindow }) => {
     const target = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().endsWith('/renderer/index.html'));
     const original = target.setIgnoreMouseEvents.bind(target); globalThis.libertyInteractionCalls = [];
@@ -51,6 +55,13 @@ try {
   await popup.locator('#pair button').click();
   try { await popup.locator('#pair').waitFor({ state: 'hidden', timeout: 10000 }); }
   catch { throw new Error('Extension pairing failed: ' + await popup.locator('#status').textContent()); }
+  for (const [surfaceColor, color] of [['#202632', '#438bff'], ['#f700d0', '#ffffff'], ['#e8edf3', '#ff3045']]) {
+    assert.equal((await control.evaluate(value => libertyControl.action('preferences', value), { surfaceColor, color, colorMode: 'manual' })).ok, true);
+    await popup.waitForFunction(({ surfaceColor, color }) => {
+      const style = getComputedStyle(document.documentElement);
+      return style.getPropertyValue('--surface-color').trim() === surfaceColor && style.getPropertyValue('--red').trim() === color;
+    }, { surfaceColor, color }, { timeout: 12000, polling: 50 });
+  }
   const pages = [];
   for (const service of services) {
     const page = await browser.newPage();

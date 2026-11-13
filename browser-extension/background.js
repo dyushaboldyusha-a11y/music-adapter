@@ -3,6 +3,23 @@ const BASE = 'http://127.0.0.1:16837';
 const players = new Map(), covers = new Map();
 let timer, syncing = false, dirty = false, lastError = '', results = [];
 let waveTab = null, levelSending = false, levelFailures = 0;
+const THEME_COLORS = ['--app-bg', '--glass-bg', '--glass-panel', '--glass-border', '--glass-highlight', '--glass-inner-border', '--glass-card-border', '--text', '--muted', '--track-bg', '--shadow-color', '--red', '--accent-ink', '--on-accent', '--on-accent-hover', '--error-ink', '--surface-color'];
+let cachedTheme;
+async function popupTheme() {
+  if (cachedTheme === undefined) {
+    try { cachedTheme = (await chrome.storage.local.get('popupTheme')).popupTheme || null; }
+    catch { cachedTheme = null; }
+  }
+  return cachedTheme;
+}
+async function rememberTheme(theme) {
+  if (!theme || !['light', 'dark'].includes(theme.appearance) || !theme.tokens || typeof theme.tokens !== 'object') return;
+  const tokens = Object.fromEntries(THEME_COLORS.filter(key => typeof theme.tokens[key] === 'string' && theme.tokens[key].length <= 160).map(key => [key, theme.tokens[key]]));
+  if (!tokens['--app-bg'] || !tokens['--text'] || !tokens['--red']) return;
+  const next = { appearance: theme.appearance, tokens };
+  if (JSON.stringify(await popupTheme()) === JSON.stringify(next)) return;
+  cachedTheme = next; await chrome.storage.local.set({ popupTheme: next });
+}
 async function waveStatus() { if (waveTab === null) waveTab = (await chrome.storage.session.get('waveTab')).waveTab ?? null; return waveTab; }
 async function stopWave() { waveTab = null; await chrome.storage.session.remove('waveTab'); try { await chrome.runtime.sendMessage({ type: 'wave:close' }); } catch {} }
 async function startWave(message) {
@@ -59,6 +76,7 @@ async function sync() {
     let data;
     try { data = await post('/v1/sync', { clientId: c.clientId, sources, results: outgoing }, c.token); }
     catch (error) { results.unshift(...outgoing); throw error; }
+    await rememberTheme(data.theme).catch(() => {});
     lastError = '';
     for (const action of data.commands || []) {
       let result;
@@ -91,11 +109,11 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     schedule(); return;
   }
   if (sender.url !== chrome.runtime.getURL('popup.html')) return;
-  if (message.type === 'status') { Promise.all([config(), waveStatus()]).then(([c, waveTab]) => respond({ paired: !!c.token, players: players.size, error: lastError, waveTab })); return true; }
+  if (message.type === 'status') { Promise.all([config(), waveStatus(), popupTheme()]).then(([c, waveTab, theme]) => { respond({ paired: !!c.token, players: players.size, error: lastError, waveTab, theme }); if (c.token) schedule(); }); return true; }
   if (message.type === 'wave-start') { startWave(message).then(() => respond({ ok: true }), error => respond({ ok: false, error: error.message })); return true; }
   if (message.type === 'wave-stop') { stopWave().then(() => respond({ ok: true })); return true; }
   if (message.type === 'pair') {
-    (async () => { try { const c = await config(); const data = await post('/v1/pair', { code: String(message.code || '').trim().toUpperCase(), clientId: c.clientId, browser: LibertyServices.browserName(navigator.userAgent) }); await chrome.storage.local.set({ token: data.token }); lastError = ''; schedule(); respond({ ok: true }); } catch (error) { respond({ ok: false, error: error.message === 'Failed to fetch' ? 'Откройте Liberty Wave и нажмите «Подключить браузер»' : error.message }); } })();
+    (async () => { try { const c = await config(); const data = await post('/v1/pair', { code: String(message.code || '').trim().toUpperCase(), clientId: c.clientId, browser: LibertyServices.browserName(navigator.userAgent) }); await chrome.storage.local.set({ token: data.token }); await rememberTheme(data.theme).catch(() => {}); lastError = ''; schedule(); respond({ ok: true }); } catch (error) { respond({ ok: false, error: error.message === 'Failed to fetch' ? 'Откройте Liberty Wave и нажмите «Подключить браузер»' : error.message }); } })();
     return true;
   }
   if (message.type === 'disconnect') { stopWave().then(() => chrome.storage.local.remove('token')).then(() => respond({ ok: true })); return true; }

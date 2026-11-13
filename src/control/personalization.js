@@ -11,7 +11,7 @@
     appearance.className = 'appearance-options';
     appearance.innerHTML = `<div class="card settings-list"><label class="setting-row color-source-row"><select id="color-mode" aria-label="Источник акцента"><option value="manual">Моя палитра</option><option value="artwork">Акцент из обложки</option></select></label></div><h3 class="section-title">Конструктор виджета</h3><div class="card settings-list"><label class="setting-row"><span><strong>Обложка</strong></span><input id="show-artwork" type="checkbox" class="switch"></label><label class="setting-row"><span><strong>Исполнитель</strong></span><input id="show-artist" type="checkbox" class="switch"></label><label class="setting-row"><span><strong>Время трека</strong></span><input id="show-time" type="checkbox" class="switch"></label></div>`;
     const palette = $('page-appearance').querySelector('.palette-card');
-    $('page-appearance').insertBefore(appearance, palette.nextSibling);
+    palette.parentElement.insertBefore(appearance, palette.nextSibling);
     let nickDirty = false, monitorKey = '';
     $('nickname').addEventListener('input', () => { nickDirty = true; $('nickname-status').textContent = `${Array.from($('nickname').value.normalize('NFC').trim()).length}/12`; });
     $('nickname-form').addEventListener('submit', async event => { event.preventDefault(); const result = await action('preferences', { nickname: $('nickname').value }); if (result.ok) { nickDirty = false; $('nickname-status').textContent = 'Никнейм сохранён'; } });

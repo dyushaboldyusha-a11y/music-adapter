@@ -8,7 +8,14 @@
       accent: [['#ff3045', 'Красный'], ['#ff9f30', 'Оранжевый'], ['#22c55e', 'Зелёный'], ['#22d3ee', 'Голубой'], ['#438bff', 'Синий'], ['#a855f7', 'Фиолетовый'], ['#ec4899', 'Розовый'], ['#d4d4d8', 'Серый']]
     };
     const dirty = key => draft[key] !== saved[key];
-    function preview() { api.apply(active() && dirty('accent') ? draft.accent : effective, active() && dirty('surface') ? draft.surface : saved.surface); }
+    function syncPresetSelection() {
+      for (const button of $('color-presets').children) button.setAttribute('aria-pressed', String(button.dataset.color === draft[selected]));
+    }
+    function preview() {
+      const color = active() && dirty('accent') ? draft.accent : effective, surfaceColor = active() && dirty('surface') ? draft.surface : saved.surface;
+      api.apply(color, surfaceColor); syncPresetSelection();
+      root.dispatchEvent(new CustomEvent('liberty:theme-preview', { detail: { color, surfaceColor } }));
+    }
     function render() {
       draft[selected] = api.fromHsv(hsv); invalid = false; preview();
       $('color-hex').value = draft[selected]; $('brightness').value = Math.round(hsv.v * 100); $('brightness-value').textContent = `${$('brightness').value}%`;
@@ -26,8 +33,11 @@
     function renderPresets() {
       $('color-presets').replaceChildren();
       for (const [color, label] of presets[selected]) {
-        const button = document.createElement('button'); button.type = 'button'; button.style.setProperty('--swatch', color); button.dataset.color = color; button.setAttribute('aria-label', label); button.addEventListener('click', () => select(color)); $('color-presets').append(button);
+        const button = document.createElement('button'); button.type = 'button'; button.style.setProperty('--swatch', color); button.dataset.color = color; button.setAttribute('aria-label', label); button.title = `${label} · ${color}`;
+        button.style.setProperty('--swatch-ink', api.contrast(color, '#000000') >= api.contrast(color, '#ffffff') ? '#000000' : '#ffffff');
+        button.addEventListener('click', () => select(color)); $('color-presets').append(button);
       }
+      syncPresetSelection();
     }
     target?.addEventListener('change', () => { selected = target.value === 'accent' ? 'accent' : 'surface'; renderPresets(); select(draft[selected]); });
     renderPresets();
