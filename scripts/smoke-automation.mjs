@@ -44,23 +44,26 @@ try {
   assert.equal((await action('voiceMode', 'invalid')).ok, false);
   await widget.evaluate(() => detachState());
   const showVoice = voice => widget.evaluate(voice => update({ ...state, voice }), voice);
-  await showVoice({ enabled: true, mode: 'wake', phase: 'waiting' });
-  assert.match(await widget.locator('#voice-indicator').innerText(), /Wave/);
-  for (const phase of ['listening', 'processing']) {
+  for (const phase of ['waiting', 'listening', 'processing']) {
     await showVoice({ enabled: true, mode: 'wake', phase });
-    assert.equal(await widget.locator('#voice-indicator').getAttribute('data-tone'), phase);
+    assert.equal(await widget.locator('#voice-indicator').count(), 0, 'Voice activity must not add a label or badge to the widget');
+    assert.equal(await widget.locator('#key-hint').count(), 0, 'The pin instruction must not return during voice activity');
   }
   assert.equal((await action('command', { command: 'volume', value: .3 })).ok, true);
   await widget.evaluate(async () => update(await bridge.getState()));
   await showVoice({ enabled: true, mode: 'wake', phase: 'recognized', feedback: { text: 'Громкость 30%', heard: 'вейв громкость тридцать процентов', ok: true, until: Date.now() + 4000 } });
-  assert.match(await widget.locator('#voice-indicator').innerText(), /вейв.*→ Громкость 30%/);
-  assert.equal(await widget.locator('#voice-indicator').getAttribute('data-tone'), 'success');
-  const indicatorBounds = await widget.locator('#voice-indicator').evaluate(element => ({ right: element.getBoundingClientRect().right, viewport: innerWidth }));
-  assert.ok(indicatorBounds.right <= indicatorBounds.viewport);
+  assert.equal(await widget.locator('#voice-indicator').count(), 0, 'Recognized commands must remain free of overlay labels');
+  assert.equal((await control.evaluate(() => libertyControl.getState())).volume, .3, 'Removing voice labels must not disable player commands');
+  await showVoice({ enabled: true, mode: 'hold', phase: 'waiting' });
+  assert.equal(await widget.locator('#voice-indicator').count(), 0, 'Hold mode must not restore the old voice instruction');
+  await showVoice({ enabled: true, mode: 'wake', error: 'Ошибка распознавания' });
+  assert.equal(await widget.locator('#voice-indicator').count(), 0, 'Voice errors belong in settings, not on the widget');
+  const caption = await widget.evaluate(() => ({ actual: document.getElementById('source-name').textContent, expected: state.source?.name || 'Ожидание плеера' }));
+  assert.equal(caption.actual, caption.expected, 'The widget source caption must not append application/browser labels');
   await mkdir(join(root, 'artifacts'), { recursive: true });
-  await widget.screenshot({ path: join(root, 'artifacts/voice-wake-indicator.png') });
+  await widget.screenshot({ path: join(root, 'artifacts/voice-without-widget-labels.png') });
   await showVoice({ enabled: false });
-  assert.equal(await widget.locator('#voice-indicator').isVisible(), false);
+  assert.equal(await widget.locator('#voice-indicator').count(), 0);
   await widget.evaluate(async () => { bridge.onState(update); update(await bridge.getState()); });
   const captureStart = await control.evaluate(() => libertyControl.getState());
   if (process.platform !== 'win32') assert.equal((await action('microphoneTest', true)).ok, false);
@@ -99,5 +102,5 @@ try {
   assert.equal(restored.preferences.scale, 1); assert.equal(restored.shortcuts.bindings.voiceHold, 'Control+Alt+F7');
   await control.getByRole('button', { name: 'Удалить профиль Моя игра' }).click();
   await control.waitForFunction(async () => (await libertyControl.getState()).appProfiles.items.length === 0);
-  console.log('PASS: real Electron profile editor, exact EXE normalization, validation rollback, profile/base separation, wake mode without binding, voice indicator states, hold binding, deletion and restart persistence. No microphone opened.');
+  console.log('PASS: real Electron profile editor, exact EXE normalization, validation rollback, profile/base separation, wake/hold modes and commands without widget voice/kind/pin labels, hold binding, deletion and restart persistence. No microphone opened.');
 } finally { await app?.close(); await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }

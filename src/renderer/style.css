@@ -4,6 +4,7 @@
   --surface-color: #e8edf3;
   --app-bg: #e8edf3;
   --glass-bg: #e8edf3df;
+  --widget-glass-bg: color-mix(in srgb,var(--app-bg) 58%,transparent);
   --glass-panel: #ffffffa6;
   --glass-border: #ffffffb8;
   --glass-highlight: #ffffffdc;
@@ -26,10 +27,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-ink,
 .icon-library { position: absolute; width: 0; height: 0; overflow: hidden; }
 svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
 
-/* The glass layer is separate from the controls so reduced decoration opacity
-   never reduces legibility or the hit targets of the player. */
-.widget { position: relative; isolation: isolate; display: flex; align-items: center; gap: 22px; width: 100%; height: 202px; padding: 20px 22px; border: 1px solid transparent; border-radius: 28px; background: var(--glass-bg); }
-.widget-surface { position: absolute; z-index: -1; inset: -1px; pointer-events: none; border-radius: inherit; border: 1px solid var(--glass-border); background: linear-gradient(135deg, color-mix(in srgb, var(--glass-highlight) 36%, transparent), transparent 48%); box-shadow: 0 9px 17px var(--shadow-color), inset 0 1px 0 var(--glass-highlight), inset 0 -1px 0 color-mix(in srgb, var(--ink) 5%, transparent); backdrop-filter: blur(24px) saturate(135%); opacity: var(--decoration-opacity, 1); }
+/* Fade the glass separately, keeping foreground controls and hit targets intact. */
+.widget { position: relative; isolation: isolate; display: flex; align-items: center; gap: 22px; width: 100%; height: 202px; padding: 20px 22px; border: 1px solid transparent; border-radius: 28px; }
+.widget-surface { position: absolute; z-index: -1; inset: -1px; pointer-events: none; border-radius: inherit; border: 1px solid color-mix(in srgb,var(--glass-border) 60%,transparent); background: linear-gradient(135deg,color-mix(in srgb,var(--glass-highlight) 16%,transparent),transparent 48%),var(--widget-glass-bg); box-shadow: 0 6px 12px var(--shadow-color),inset 0 1px color-mix(in srgb,var(--glass-highlight) 50%,transparent); backdrop-filter: blur(20px) saturate(120%); opacity: var(--decoration-opacity, 1); }
 .drag-surface { position: absolute; inset: 0; border-radius: inherit; -webkit-app-region: drag; }
 .edge-waves { position: absolute; inset: -13px; width: calc(100% + 26px); height: calc(100% + 26px); overflow: hidden; pointer-events: none; stroke: none; z-index: -1; opacity: var(--decoration-opacity, 1); }
 .edge-waves use { fill: none; stroke: var(--red); vector-effect: non-scaling-stroke; }
@@ -52,7 +52,7 @@ h1 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; 
 .icon-button:disabled { opacity: .3; cursor: default; }
 body:not(.locked) .icon-button:hover:enabled { background: var(--track-bg); transform: translateY(-1px); }
 body:not(.locked) .icon-button:active:enabled { transform: scale(.94); }
-.more { margin-top: 1px; width: 30px; height: 30px; color: var(--muted); border: 1px solid var(--glass-border); background: var(--glass-panel); box-shadow: inset 0 1px 0 var(--glass-highlight); }
+.more { margin-top: 1px; width: 30px; height: 30px; color: var(--muted); border: 1px solid color-mix(in srgb,var(--glass-border) calc(var(--decoration-opacity,1) * 60%),transparent); background: color-mix(in srgb,var(--glass-panel) calc(var(--decoration-opacity,1) * 38%),transparent); }
 .more svg { width: 17px; height: 17px; }
 .timeline { pointer-events: auto; }
 input[type='range'] { display: block; appearance: none; width: 100%; height: 16px; margin: 0; padding: 0; background: transparent; cursor: pointer; --progress: 0%; }
@@ -63,7 +63,7 @@ input[type='range']:disabled { cursor: default; opacity: .4; }
 input[type='range']:disabled::-webkit-slider-thumb { opacity: 0; }
 .times { display: flex; justify-content: space-between; margin-top: 0; font-size: 10px; line-height: 14px; font-variant-numeric: tabular-nums; color: var(--muted); }
 .controls { position: relative; isolation: isolate; display: grid; grid-template-columns: 30px 1fr 44px 1fr 30px; align-items: center; justify-items: center; height: 52px; padding: 4px 8px; border-radius: 17px; }
-.controls::before { content: ''; position: absolute; z-index: -1; inset: 0; border-radius: inherit; border: 1px solid var(--glass-border); background: var(--glass-panel); box-shadow: inset 0 1px 0 var(--glass-highlight), 0 2px 4px var(--shadow-color); pointer-events: none; opacity: var(--decoration-opacity, 1); }
+.controls::before { content: ''; position: absolute; z-index: -1; inset: 0; border-radius: inherit; border: 1px solid color-mix(in srgb,var(--glass-border) 50%,transparent); background: color-mix(in srgb,var(--glass-panel) 42%,transparent); box-shadow: inset 0 1px color-mix(in srgb,var(--glass-highlight) 45%,transparent); pointer-events: none; opacity: var(--decoration-opacity, 1); }
 #shuffle { grid-column: 1; grid-row: 1; }
 #previous { grid-column: 2; grid-row: 1; }
 #play-pause { grid-column: 3; grid-row: 1; }
@@ -86,15 +86,15 @@ body:not(.locked) .play-button:active:enabled { transform: scale(.94); }
 .volume-row input::-webkit-slider-thumb { width: 8px; height: 8px; margin-top: -2px; }
 .volume-row output { min-width: 30px; font-size: 10px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 
-.widget-footer { display: flex; justify-content: flex-end; align-items: center; height: 28px; margin-top: 8px; padding: 3px 7px; gap: 9px; border: 1px solid var(--glass-border); border-radius: 10px; background: var(--glass-bg); box-shadow: inset 0 1px var(--glass-highlight),0 2px 5px var(--shadow-color); backdrop-filter: blur(16px); -webkit-app-region: no-drag; }
+.widget-footer { position: relative; isolation: isolate; display: flex; justify-content: flex-end; align-items: center; height: 28px; margin-top: 8px; padding: 3px 7px; gap: 9px; border: 1px solid transparent; border-radius: 10px; -webkit-app-region: no-drag; }
+.widget-footer::before { content: ''; position: absolute; z-index: -1; inset: -1px; border-radius: inherit; border: 1px solid color-mix(in srgb,var(--glass-border) 45%,transparent); background: color-mix(in srgb,var(--app-bg) 38%,transparent); backdrop-filter: blur(14px); opacity: var(--decoration-opacity,1); pointer-events: none; }
 .source-status { display: flex; align-items: center; gap: 7px; min-width: 0; flex: 1; color: var(--muted); font-size: 10px; }
 #source-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .source-dot { width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: var(--muted); }
 body.connected .source-dot { background: var(--red); }
 .mode-hint { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
-.mode-hint #mode-text { display: none; }
 .mode-hint svg { width: 11px; height: 11px; }
-kbd { padding: 3px 5px; border: 1px solid var(--glass-border); border-radius: 6px; font-family: inherit; font-size: 9px; color: var(--muted); background: var(--glass-panel); box-shadow: inset 0 1px 0 var(--glass-highlight); }
+kbd { padding: 3px 5px; border: 1px solid color-mix(in srgb,var(--glass-border) calc(var(--decoration-opacity,1) * 50%),transparent); border-radius: 6px; font-family: inherit; font-size: 9px; color: var(--muted); background: color-mix(in srgb,var(--glass-panel) calc(var(--decoration-opacity,1) * 30%),transparent); }
 #interaction-key { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .demo-label { margin: 0 2px; flex-shrink: 0; font-size: 8px; color: var(--muted); letter-spacing: .6px; }
 body.no-artwork .cover { display: none; }
@@ -135,7 +135,7 @@ body.compact .volume-row input { width: 84px; height: 16px; }
 body.compact .volume-row output { display: none; }
 body.compact .widget-footer { height: 22px; margin-top: 6px; padding: 1px 7px; gap: 8px; border-radius: 8px; }
 body.compact:not(.connected) .player { grid-template-columns: minmax(0,1fr); grid-template-rows: 34px; align-content: center; }
-body.compact #key-hint, body.compact .mode-hint svg { display: none; }
+body.compact .mode-hint svg { display: none; }
 body.compact .more { margin-top: 1px; width: 22px; height: 25px; border-radius: 8px; }
 
 .beat-frame { position: absolute; inset: -1px; border: 1px solid var(--red); border-radius: inherit; pointer-events: none; opacity: calc(var(--beat-strength, 0) * var(--decoration-opacity, 1)); box-shadow: 0 0 14px color-mix(in srgb, var(--red) 35%, transparent), inset 0 0 8px color-mix(in srgb, var(--red) 15%, transparent); }
@@ -144,12 +144,4 @@ body.has-rhythm-bars .widget { height: 232px; }
 .music-rhythm i { flex: 1; min-width: 0; border-radius: 3px 3px 0 0; background: var(--red); transform: scaleY(0); transform-origin: bottom; }
 body.compact.has-rhythm-bars .widget { height: 100px; align-items: flex-start; }
 body.compact .music-rhythm { left: 13px; right: 13px; bottom: 5px; height: 12px; gap: 3px; }
-.voice-indicator { position: fixed; z-index: 8; top: 3px; right: 20px; max-width: calc(100% - 40px); display: flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 10px; border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--ink); box-shadow: inset 0 1px 0 var(--glass-highlight), 0 2px 4px var(--shadow-color); backdrop-filter: blur(16px); font-size: 10px; line-height: 14px; pointer-events: none; -webkit-app-region: no-drag; }
-#voice-indicator-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.voice-indicator-dot { flex: 0 0 5px; height: 5px; border-radius: 50%; background: var(--muted); }
-.voice-indicator[data-tone='listening'] .voice-indicator-dot, .voice-indicator[data-tone='processing'] .voice-indicator-dot { background: var(--red); }
-.voice-indicator[data-tone='success'] .voice-indicator-dot { background: #24894f; }
-.voice-indicator[data-tone='error'] .voice-indicator-dot { background: #c34c46; }
-:root[data-appearance='dark'] .voice-indicator[data-tone='success'] .voice-indicator-dot { background: #83d7a5; }
-:root[data-appearance='dark'] .voice-indicator[data-tone='error'] .voice-indicator-dot { background: #ffaaa3; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }

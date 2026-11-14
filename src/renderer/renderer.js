@@ -6,11 +6,11 @@ const audioWave = LibertyAudioWave.create();
 bridge.onAudioLevel(level => audioWave.level(level));
 const formatTime = value => { const total = Math.floor(Math.max(0, value || 0)); return total >= 3600 ? `${Math.floor(total / 3600)}:${String(Math.floor(total / 60) % 60).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}` : `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; };
 async function command(name, value) { if (!state.interaction) return { ok: false }; const result = await bridge.command(name, value); if (!result.ok) console.warn(result.error || 'Не удалось выполнить команду'); return result; }
-function sourceLabel(source) { return `${source.name} · ${source.kind === 'app' ? 'приложение' : source.provider === 'browser' ? 'браузер' : source.browser || 'браузер'}`; }
+function sourceLabel(source) { return source.name; }
 function update(next) {
   if (!next) return;
   if (state.source?.id !== next.source?.id || !next.interaction) { clearTimeout(volumeTimer); volumeEditing = false; }
-  state = next; playbackClock.update(next); paintVoice();
+  state = next; playbackClock.update(next);
   document.body.classList.toggle('compact', state.compact === true);
   const times = document.querySelector('.times'), timeline = document.querySelector('.timeline'), footer = document.querySelector('.widget-footer');
   if (state.compact && times.parentElement !== footer) footer.insertBefore(times, $('demo-label'));
@@ -65,8 +65,6 @@ function update(next) {
   $('repeat').setAttribute('aria-pressed', String(state.repeat !== 'none'));
   $('repeat').setAttribute('aria-label', state.repeat === 'track' ? 'Повтор трека' : state.repeat === 'list' ? 'Повтор списка' : 'Включить повтор');
   $('repeat-one').hidden = state.repeat !== 'track';
-  $('mode-text').textContent = state.interaction ? 'Перетащите за обложку или название' : 'Поверх окон · клики проходят сквозь';
-  $('key-hint').textContent = state.interaction ? 'закрепить' : 'управлять';
   const controlKey = state.shortcuts?.active.toggleInteraction[0];
   $('interaction-key').textContent = controlKey ? LibertyShortcuts.format(controlKey) : 'Трей';
   $('interaction-key').title = state.interaction ? (controlKey ? LibertyShortcuts.format(controlKey) : 'Настройте горячие клавиши через значок в трее') : '';
@@ -105,10 +103,3 @@ window.addEventListener('pagehide', detachState, { once: true });
 bridge.getState().then(update);
 document.addEventListener('wheel', event => { if (event.ctrlKey) event.preventDefault(); }, { passive: false });
 setInterval(paintProgress, 200);
-
-function paintVoice() {
-  const view = LibertyVoiceStatus.status(state.voice), badge = $('voice-indicator');
-  badge.hidden = !view.visible; badge.dataset.tone = view.tone;
-  $('voice-indicator-text').textContent = view.text;
-  badge.setAttribute('aria-label', view.text);
-}

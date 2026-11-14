@@ -15,6 +15,19 @@ function contrast(a, b) {
   const luminance = rgb => rgb.map(value => value / 255).map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4).reduce((sum, value, i) => sum + value * [.2126, .7152, .0722][i], 0);
   const x = luminance(a), y = luminance(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
 }
+async function screenshotPixels(png, viewport, points) {
+  return app.evaluate(({ nativeImage }, { png, viewport, points }) => {
+    const image = nativeImage.createFromBuffer(Buffer.from(png, 'base64')), { width, height } = image.getSize(), bytes = image.toBitmap();
+    return points.map(([x, y]) => {
+      const px = Math.max(0, Math.min(width - 1, Math.floor(x * width / viewport[0]))), py = Math.max(0, Math.min(height - 1, Math.floor(y * height / viewport[1])));
+      const offset = (py * width + px) * 4;
+      return [bytes[offset + 2], bytes[offset + 1], bytes[offset]];
+    });
+  }, { png: png.toString('base64'), viewport, points });
+}
+function effectiveAlpha(black, white) {
+  return 1 - white.reduce((sum, value, index) => sum + (value - black[index]) / 255, 0) / 3;
+}
 try {
   await mkdir(output, { recursive: true });
   app = await _electron.launch({ executablePath: require('electron'), args: [root, '--demo', '--widget-only', '--disable-gpu', '--force-device-scale-factor=1', `--user-data-dir=${profile}`] });
@@ -49,7 +62,7 @@ try {
     assert.equal(geometry.timeCount, 1); assert.equal(geometry.elapsedCount, 1);
     for (let i = 0; i < geometry.children.length; i++) {
       const box = geometry.children[i];
-      assert.ok(box.left >= geometry.footer.left && box.right <= geometry.footer.right + .5, 'Footer content must fit its glass backing');
+      assert.ok(box.left >= geometry.footer.left && box.right <= geometry.footer.right + .5, 'Footer content must fit its available layout');
       if (i) assert.ok(geometry.children[i - 1].right <= box.left + .5, 'Long source, hour timestamps, demo label and shortcut must not overlap');
     }
     if (scale === 1) await widget.screenshot({ path: join(output, `${compact ? 'compact' : 'full'}-${rhythmBars ? 'rhythm' : 'plain'}-long.png`) });
@@ -66,24 +79,51 @@ try {
     await render({});
     for (const selector of ['.controls', '.timeline', '.times']) assert.equal(await widget.locator(selector).isVisible(), true, `Reconnection must restore ${selector}`);
   }
-  for (const compact of [false, true]) for (const [tone, surfaceColor] of [['light', '#e8edf3'], ['dark', '#202632']]) for (const desktop of ['#000000', '#ffffff']) {
-    await render({ compact, surfaceColor, opacity: .25, scale: 1, showTime: true, rhythmBars: false });
-    await widget.evaluate(desktop => { document.documentElement.style.backgroundColor = desktop; }, desktop);
-    const inspect = await widget.evaluate(() => {
-      const rgb = color => { const canvas = document.createElement('canvas'), context = canvas.getContext('2d'); context.fillStyle = color; context.fillRect(0, 0, 1, 1); return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3); };
-      const footer = document.querySelector('.widget-footer').getBoundingClientRect();
-      return { viewport: [innerWidth, innerHeight], preferences: state.preferences, items: ['#title', '#artist', '#source-name'].map((selector, i) => { const element = document.querySelector(selector), rect = element.getBoundingClientRect(); return { selector, color: rgb(getComputedStyle(element).color), point: i === 2 ? [footer.left + 3, (footer.top + footer.bottom) / 2] : [rect.right - 3, rect.bottom - 3] }; }) };
-    });
-    const png = await widget.screenshot({ path: join(output, `${compact ? 'compact' : 'full'}-${tone}-${desktop === '#000000' ? 'black' : 'white'}-opacity25.png`) });
-    const backgrounds = await app.evaluate(({ nativeImage }, { png, viewport, points }) => {
-      const image = nativeImage.createFromBuffer(Buffer.from(png, 'base64')), { width, height } = image.getSize(), bytes = image.toBitmap();
-      return points.map(([x, y]) => { const offset = (Math.floor(y * height / viewport[1]) * width + Math.floor(x * width / viewport[0])) * 4; return [bytes[offset + 2], bytes[offset + 1], bytes[offset]]; });
-    }, { png: png.toString('base64'), viewport: inspect.viewport, points: inspect.items.map(item => item.point) });
-    const ratios = inspect.items.map((item, i) => ({ selector: item.selector, contrast: contrast(item.color, backgrounds[i]) }));
-    assert.ok(ratios[0].contrast >= 4.5, `${tone} title must stay readable at 25% decoration opacity over ${desktop}: ${ratios[0].contrast}`);
-    for (const item of ratios.slice(1)) assert.ok(item.contrast >= 3, `${tone} ${item.selector} needs readable secondary contrast over ${desktop}: ${item.contrast}`);
-    assert.equal(inspect.preferences.opacity, .25); assert.equal(inspect.preferences.surfaceColor, surfaceColor);
-    measurements.push({ compact, tone, desktop, ratios });
+  for (const compact of [false, true]) for (const [tone, surfaceColor] of [['light', '#e8edf3'], ['dark', '#202632']]) {
+    const samples = new Map();
+    for (const opacity of [1, .25]) for (const desktop of ['#000000', '#ffffff']) {
+      await render({ compact, surfaceColor, opacity, scale: 1, showTime: true, rhythmBars: false });
+      await widget.evaluate(desktop => { document.documentElement.style.backgroundColor = desktop; document.documentElement.style.backgroundImage = ''; }, desktop);
+      const inspect = await widget.evaluate(() => {
+        const rgb = color => { const canvas = document.createElement('canvas'), context = canvas.getContext('2d'); context.fillStyle = color; context.fillRect(0, 0, 1, 1); return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3); };
+        const footer = document.querySelector('.widget-footer').getBoundingClientRect(), card = document.getElementById('widget').getBoundingClientRect();
+        return {
+          viewport: [innerWidth, innerHeight], preferences: state.preferences,
+          samplePoints: [[(card.left + card.right) / 2, card.bottom - 5], [footer.right - 3, (footer.top + footer.bottom) / 2]],
+          items: ['#title', '#artist', '#source-name'].map((selector, i) => { const element = document.querySelector(selector), rect = element.getBoundingClientRect(); return { selector, color: rgb(getComputedStyle(element).color), point: i === 2 ? [footer.right - 3, (footer.top + footer.bottom) / 2] : [rect.right - 3, rect.bottom - 3] }; }),
+          foregroundOpacities: ['#title', '#artist', '#play-pause', '.timeline'].map(selector => getComputedStyle(document.querySelector(selector)).opacity),
+          sourceName: document.getElementById('source-name').textContent, expectedSourceName: state.source?.name || 'Ожидание плеера'
+        };
+      });
+      const png = await widget.screenshot({ path: join(output, `${compact ? 'compact' : 'full'}-${tone}-${desktop === '#000000' ? 'black' : 'white'}-opacity${Math.round(opacity * 100)}.png`) });
+      const pixels = await screenshotPixels(png, inspect.viewport, [...inspect.samplePoints, ...inspect.items.map(item => item.point)]);
+      samples.set(`${opacity}:${desktop}`, pixels.slice(0, 2));
+      const ratios = inspect.items.map((item, i) => ({ selector: item.selector, contrast: contrast(item.color, pixels[i + 2]) }));
+      // A freely transparent surface cannot guarantee fixed-palette contrast on
+      // every wallpaper without the opaque backing the user explicitly rejected.
+      // Check readable foreground on compatible wallpapers and retain opposite
+      // extreme screenshots as visual evidence rather than forcing a new floor.
+      if (tone === 'light' && desktop === '#ffffff' || tone === 'dark' && desktop === '#000000') {
+        assert.ok(ratios[0].contrast >= 4.5, `${tone} title must stay readable on its compatible wallpaper: ${ratios[0].contrast}`);
+        for (const item of ratios.slice(1)) assert.ok(item.contrast >= 3, `${tone} ${item.selector} needs readable secondary contrast: ${item.contrast}`);
+      }
+      assert.deepEqual(inspect.foregroundOpacities, ['1', '1', '1', '1'], 'Transparency must not fade text or transport hit targets');
+      assert.equal(inspect.sourceName, inspect.expectedSourceName, 'The source caption must omit application/browser kind labels');
+      assert.equal(await widget.locator('#key-hint').count(), 0, 'The widget must not include a pin/unpin instruction');
+      assert.equal(await widget.locator('#voice-indicator').count(), 0, 'The widget must not include the voice label or badge');
+      assert.equal(inspect.preferences.opacity, opacity); assert.equal(inspect.preferences.surfaceColor, surfaceColor);
+      measurements.push({ compact, tone, desktop, opacity, ratios, backgroundPixels: pixels.slice(0, 2) });
+    }
+    for (const [index, layer] of ['card', 'footer'].entries()) {
+      const full = effectiveAlpha(samples.get('1:#000000')[index], samples.get('1:#ffffff')[index]);
+      const low = effectiveAlpha(samples.get('0.25:#000000')[index], samples.get('0.25:#ffffff')[index]);
+      assert.ok(full > .1 && full < .85, `${tone} ${layer} must be visibly translucent at 100%: alpha ${full}`);
+      assert.ok(low >= -.02 && low < full * .65, `${tone} ${layer} must actually fade at 25% instead of keeping a fixed backing: ${full} → ${low}`);
+      assert.ok(full - low >= .15, `${tone} ${layer} opacity control must change actual rendered pixels`);
+      measurements.push({ compact, tone, layer, alpha100: full, alpha25: low });
+    }
+    await widget.evaluate(() => { document.documentElement.style.backgroundImage = 'radial-gradient(ellipse at 80% 20%,#a37665 0%,transparent 55%),linear-gradient(130deg,#1c3348,#637367 55%,#d6bc83)'; });
+    await widget.screenshot({ path: join(output, `${compact ? 'compact' : 'full'}-${tone}-textured-opacity25.png`) });
   }
   await render({ compact: false, opacity: 1, surfaceColor: '#202632' }, { playing: false, muted: true });
   assert.equal(await widget.locator('#play-icon').getAttribute('href'), '#i-play');
@@ -102,7 +142,7 @@ try {
   await widget.screenshot({ path: join(output, 'white-accent-keyboard-focus.png') });
   assert.deepEqual(errors, []);
   await writeFile(join(output, 'measurements.json'), JSON.stringify(measurements, null, 2) + '\n');
-  console.log('PASS: real Electron full/compact/rhythm footers across three scales; hour timestamps and long shortcuts without overlap; time visibility/reparenting, disconnected/reconnected states; primary and secondary contrast on actual black/white screenshots at saved 25% decoration opacity; paused/muted icons.');
+  console.log('PASS: real Electron full/compact/rhythm layouts across three scales; time visibility and source reconnection; actual card/footer translucency at 100% and 25% on black/white/textured wallpapers without an opaque floor; opaque foreground, compatible-wallpaper contrast, removed voice/kind/pin labels, paused/muted icons and keyboard focus.');
 } finally {
   await app?.close();
   await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
